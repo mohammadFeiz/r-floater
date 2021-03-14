@@ -885,7 +885,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
         return _this2.isVisible(item);
       }).map(function (item, i) {
         var id = item.id;
-        coords[id] = coords[id] || _this2.getCoord(item, true);
+        coords[id] = coords[id] || _this2.getCoord(item, true).concat(item);
         var coord = coords[id];
         var props = {
           key: i,

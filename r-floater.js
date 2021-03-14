@@ -348,7 +348,7 @@ export default class RPGraph extends Component {
     getCoords(coords);
     var Items = items.filter((item)=>this.isVisible(item)).map((item,i)=>{  
       let {id} = item;
-      coords[id] = coords[id] || this.getCoord(item,true); 
+      coords[id] = coords[id] || this.getCoord(item,true).concat(item); 
       let coord = coords[id];
       let props = {
         key:i,className:'r-floater-item' + (id === selected?' selected':''),id:item.id,
