@@ -1,7 +1,7 @@
 import React, { Component,createRef } from 'react';
 import $ from 'jquery';
 import './index.css';
-export default class RFloater extends Component {
+export default class RPGraph extends Component {
   constructor(props) {
     super(props);
     this.touch = 'ontouchstart' in document.documentElement;
@@ -28,20 +28,28 @@ export default class RFloater extends Component {
     if(init){left *= snap[0]; top *= snap[1];}
     return [this.getSnapedCoord(0,left),this.getSnapedCoord(1,top)]
   }
+  isVisible(item){
+    var show = typeof item.show === 'function'?item.show({...this.props,...this.state}):item.show;
+    return show !== false;
+  }
   getCoords(items){
     var coords = {};
     for (var i = 0; i < items.length; i++){
+      if(!this.isVisible(items[i])){continue;}
       var {id} = items[i];
+
       coords[id] = this.getCoord(items[i],true).concat(items[i]);
     }
     return coords;
   }
   getIndexById(id){var {items} = this.props;for(var i = 0; i < items.length; i++){if(items[i].id === id){return i;}}}
   getRelations(model,relations = []){
+    var {coords} = this.state;
     var {text:Text,line:Line,arrowSize} = this.props;
     var r = [];
     for(var i = 0; i < relations.length; i++){
       var rel = relations[i];
+      if(!coords[rel.from] || !coords[rel.to]){continue}
       var line = $.extend({},Line,rel.line || {});
       var text = $.extend({},Text,rel.text || {});
       r.push({
@@ -164,8 +172,7 @@ export default class RFloater extends Component {
     if(!moveHandleClassName){return;}  
     var target = $(e.target);
     if(!target.hasClass(moveHandleClassName) && target.parents('.' + moveHandleClassName).length === 0){return;}  
-    var ids = [id];
-    ids = ids.concat(this.getSiblings(item));
+    var ids = [id].concat(this.getSiblings(item));
     this.setState({selected:id})
     $('.r-floater-item').css({zIndex:1});
     $(e.currentTarget).css({zIndex:10});
@@ -185,6 +192,7 @@ export default class RFloater extends Component {
     var {items} = this.props;
     var result = [];
     for(var i = 0; i < items.length; i++){
+      if(!this.isVisible(items[i])){continue;}
       if(items[i].id === item.id){continue}
       if(items[i].group === item.group){
         result.push(items[i].id)
@@ -323,13 +331,24 @@ export default class RFloater extends Component {
       backgroundPosition:screen[0] + 'px ' + screen[1] + 'px'
     };
   }
+  mouseMove(e){
+    var {getMousePosition} = this.props;
+    if(!getMousePosition){return;}
+    var client = this.getClient(e);
+    var {screen,zoom} = this.props;
+    var dom = $(this.dom.current);
+    var offset = dom.offset()
+    var x = Math.round((client.x - offset.left) / zoom - screen[0])
+    var y = Math.round((client.y - offset.top) / zoom - screen[1])
+    getMousePosition([x,y]);
+  }
   render() { 
     var {items,events = {},screen,getCoords = ()=>{},id,className,style} = this.props;
     var {coords,selected} = this.state;
     getCoords(coords);
-    var Items = items.map((item,i)=>{  
+    var Items = items.filter((item)=>this.isVisible(item)).map((item,i)=>{  
       let {id} = item;
-      coords[id] = coords[id] || this.getCoord(item); 
+      coords[id] = coords[id] || this.getCoord(item,true); 
       let coord = coords[id];
       let props = {
         key:i,className:'r-floater-item' + (id === selected?' selected':''),id:item.id,
@@ -347,6 +366,7 @@ export default class RFloater extends Component {
         ref={this.dom} className={"r-floater" + (className?' ' + className:'')} style={style} tabIndex={0} 
         onWheel={this.wheel.bind(this)} 
         onKeyDown={this.keyDown.bind(this)} {...eventProps} id={id}
+        onMouseMove={this.mouseMove.bind(this)}
       >    
         <div className='r-floater-container' style={this.getStyle()}>
           <svg className='r-floater-svg' onMouseDown={this.svgMouseDown.bind(this)} onTouchStart={this.svgMouseDown.bind(this)}></svg>
@@ -356,4 +376,4 @@ export default class RFloater extends Component {
     );
   }
 }
-RFloater.defaultProps = {arrowSize:[10,20],text:{},line:{},screen:[0,0],snap:[1,1],zoom:1};
+RPGraph.defaultProps = {arrowSize:[10,20],text:{},line:{},screen:[0,0],snap:[1,1],zoom:1};

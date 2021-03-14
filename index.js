@@ -55,15 +55,15 @@ function _isNativeReflectConstruct() { if (typeof Reflect === "undefined" || !Re
 
 function _getPrototypeOf(o) { _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function _getPrototypeOf(o) { return o.__proto__ || Object.getPrototypeOf(o); }; return _getPrototypeOf(o); }
 
-var RFloater = /*#__PURE__*/function (_Component) {
-  _inherits(RFloater, _Component);
+var RPGraph = /*#__PURE__*/function (_Component) {
+  _inherits(RPGraph, _Component);
 
-  var _super = _createSuper(RFloater);
+  var _super = _createSuper(RPGraph);
 
-  function RFloater(props) {
+  function RPGraph(props) {
     var _this;
 
-    _classCallCheck(this, RFloater);
+    _classCallCheck(this, RPGraph);
 
     _this = _super.call(this, props);
     _this.touch = 'ontouchstart' in document.documentElement;
@@ -76,7 +76,7 @@ var RFloater = /*#__PURE__*/function (_Component) {
     return _this;
   }
 
-  _createClass(RFloater, [{
+  _createClass(RPGraph, [{
     key: "eventHandler",
     value: function eventHandler(selector, event, action) {
       var type = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 'bind';
@@ -121,11 +121,23 @@ var RFloater = /*#__PURE__*/function (_Component) {
       return [this.getSnapedCoord(0, left), this.getSnapedCoord(1, top)];
     }
   }, {
+    key: "isVisible",
+    value: function isVisible(item) {
+      var show = typeof item.show === 'function' ? item.show({ ...this.props,
+        ...this.state
+      }) : item.show;
+      return show !== false;
+    }
+  }, {
     key: "getCoords",
     value: function getCoords(items) {
       var coords = {};
 
       for (var i = 0; i < items.length; i++) {
+        if (!this.isVisible(items[i])) {
+          continue;
+        }
+
         var id = items[i].id;
         coords[id] = this.getCoord(items[i], true).concat(items[i]);
       }
@@ -147,6 +159,7 @@ var RFloater = /*#__PURE__*/function (_Component) {
     key: "getRelations",
     value: function getRelations(model) {
       var relations = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : [];
+      var coords = this.state.coords;
       var _this$props = this.props,
           Text = _this$props.text,
           Line = _this$props.line,
@@ -155,6 +168,10 @@ var RFloater = /*#__PURE__*/function (_Component) {
 
       for (var i = 0; i < relations.length; i++) {
         var rel = relations[i];
+
+        if (!coords[rel.from] || !coords[rel.to]) {
+          continue;
+        }
 
         var line = _jquery.default.extend({}, Line, rel.line || {});
 
@@ -522,8 +539,7 @@ var RFloater = /*#__PURE__*/function (_Component) {
         return;
       }
 
-      var ids = [id];
-      ids = ids.concat(this.getSiblings(item));
+      var ids = [id].concat(this.getSiblings(item));
       this.setState({
         selected: id
       });
@@ -566,6 +582,10 @@ var RFloater = /*#__PURE__*/function (_Component) {
       var result = [];
 
       for (var i = 0; i < items.length; i++) {
+        if (!this.isVisible(items[i])) {
+          continue;
+        }
+
         if (items[i].id === item.id) {
           continue;
         }
@@ -824,27 +844,48 @@ var RFloater = /*#__PURE__*/function (_Component) {
       };
     }
   }, {
+    key: "mouseMove",
+    value: function mouseMove(e) {
+      var getMousePosition = this.props.getMousePosition;
+
+      if (!getMousePosition) {
+        return;
+      }
+
+      var client = this.getClient(e);
+      var _this$props6 = this.props,
+          screen = _this$props6.screen,
+          zoom = _this$props6.zoom;
+      var dom = (0, _jquery.default)(this.dom.current);
+      var offset = dom.offset();
+      var x = Math.round((client.x - offset.left) / zoom - screen[0]);
+      var y = Math.round((client.y - offset.top) / zoom - screen[1]);
+      getMousePosition([x, y]);
+    }
+  }, {
     key: "render",
     value: function render() {
       var _this2 = this;
 
-      var _this$props6 = this.props,
-          items = _this$props6.items,
-          _this$props6$events = _this$props6.events,
-          events = _this$props6$events === void 0 ? {} : _this$props6$events,
-          screen = _this$props6.screen,
-          _this$props6$getCoord = _this$props6.getCoords,
-          getCoords = _this$props6$getCoord === void 0 ? function () {} : _this$props6$getCoord,
-          id = _this$props6.id,
-          className = _this$props6.className,
-          style = _this$props6.style;
+      var _this$props7 = this.props,
+          items = _this$props7.items,
+          _this$props7$events = _this$props7.events,
+          events = _this$props7$events === void 0 ? {} : _this$props7$events,
+          screen = _this$props7.screen,
+          _this$props7$getCoord = _this$props7.getCoords,
+          getCoords = _this$props7$getCoord === void 0 ? function () {} : _this$props7$getCoord,
+          id = _this$props7.id,
+          className = _this$props7.className,
+          style = _this$props7.style;
       var _this$state2 = this.state,
           coords = _this$state2.coords,
           selected = _this$state2.selected;
       getCoords(coords);
-      var Items = items.map(function (item, i) {
+      var Items = items.filter(function (item) {
+        return _this2.isVisible(item);
+      }).map(function (item, i) {
         var id = item.id;
-        coords[id] = coords[id] || _this2.getCoord(item);
+        coords[id] = coords[id] || _this2.getCoord(item, true);
         var coord = coords[id];
         var props = {
           key: i,
@@ -878,7 +919,8 @@ var RFloater = /*#__PURE__*/function (_Component) {
         onWheel: this.wheel.bind(this),
         onKeyDown: this.keyDown.bind(this)
       }, eventProps, {
-        id: id
+        id: id,
+        onMouseMove: this.mouseMove.bind(this)
       }), /*#__PURE__*/_react.default.createElement("div", {
         className: "r-floater-container",
         style: this.getStyle()
@@ -890,11 +932,11 @@ var RFloater = /*#__PURE__*/function (_Component) {
     }
   }]);
 
-  return RFloater;
+  return RPGraph;
 }(_react.Component);
 
-exports.default = RFloater;
-RFloater.defaultProps = {
+exports.default = RPGraph;
+RPGraph.defaultProps = {
   arrowSize: [10, 20],
   text: {},
   line: {},
