@@ -97,7 +97,24 @@ export default class RPGraph extends Component {
     $('.r-floater svg').html(lines);
   }
   componentDidUpdate(){this.update();}
-  componentDidMount(){this.update();} 
+  componentDidMount(){
+    var {getMousePosition} = this.props;
+    if(getMousePosition){
+      this.eventHandler('window','mousemove',$.proxy(this.mouseMove,this));
+    }
+    this.update();
+  } 
+  mouseMove(e){
+    var {getMousePosition} = this.props;
+    var client = this.getClient(e);
+    var {screen,zoom} = this.props;
+    var dom = $(this.dom.current);
+    var offset = dom.offset()
+    var x = Math.round((client.x - offset.left) / zoom - screen[0])
+    var y = Math.round((client.y - offset.top) / zoom - screen[1])
+    getMousePosition([x,y]);
+  }
+  
   getText({x1,y1,x2,y2,text,line}){ 
     var x = (x1+x2)/2,y = (y1+y2)/2;
     var radian = this.getRadian({x1,y1,x2,y2});
@@ -331,17 +348,6 @@ export default class RPGraph extends Component {
       backgroundPosition:screen[0] + 'px ' + screen[1] + 'px'
     };
   }
-  mouseMove(e){
-    var {getMousePosition} = this.props;
-    if(!getMousePosition){return;}
-    var client = this.getClient(e);
-    var {screen,zoom} = this.props;
-    var dom = $(this.dom.current);
-    var offset = dom.offset()
-    var x = Math.round((client.x - offset.left) / zoom - screen[0])
-    var y = Math.round((client.y - offset.top) / zoom - screen[1])
-    getMousePosition([x,y]);
-  }
   render() { 
     var {items,events = {},screen,getCoords = ()=>{},id,className,style} = this.props;
     var {coords,selected} = this.state;
@@ -366,7 +372,6 @@ export default class RPGraph extends Component {
         ref={this.dom} className={"r-floater" + (className?' ' + className:'')} style={style} tabIndex={0} 
         onWheel={this.wheel.bind(this)} 
         onKeyDown={this.keyDown.bind(this)} {...eventProps} id={id}
-        onMouseMove={this.mouseMove.bind(this)}
       >    
         <div className='r-floater-container' style={this.getStyle()}>
           <svg className='r-floater-svg' onMouseDown={this.svgMouseDown.bind(this)} onTouchStart={this.svgMouseDown.bind(this)}></svg>

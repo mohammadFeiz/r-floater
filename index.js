@@ -303,7 +303,27 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "componentDidMount",
     value: function componentDidMount() {
+      var getMousePosition = this.props.getMousePosition;
+
+      if (getMousePosition) {
+        this.eventHandler('window', 'mousemove', _jquery.default.proxy(this.mouseMove, this));
+      }
+
       this.update();
+    }
+  }, {
+    key: "mouseMove",
+    value: function mouseMove(e) {
+      var getMousePosition = this.props.getMousePosition;
+      var client = this.getClient(e);
+      var _this$props2 = this.props,
+          screen = _this$props2.screen,
+          zoom = _this$props2.zoom;
+      var dom = (0, _jquery.default)(this.dom.current);
+      var offset = dom.offset();
+      var x = Math.round((client.x - offset.left) / zoom - screen[0]);
+      var y = Math.round((client.y - offset.top) / zoom - screen[1]);
+      getMousePosition([x, y]);
     }
   }, {
     key: "getText",
@@ -455,9 +475,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
     key: "svgMouseDown",
     value: function svgMouseDown(e) {
       console.log(e.button);
-      var _this$props2 = this.props,
-          screen = _this$props2.screen,
-          moveHandleClassName = _this$props2.moveHandleClassName;
+      var _this$props3 = this.props,
+          screen = _this$props3.screen,
+          moveHandleClassName = _this$props3.moveHandleClassName;
       this.svgMoved = false;
       e.preventDefault();
 
@@ -708,9 +728,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "zoom",
     value: function zoom(sign) {
-      var _this$props3 = this.props,
-          onZoom = _this$props3.onZoom,
-          zoom = _this$props3.zoom;
+      var _this$props4 = this.props,
+          onZoom = _this$props4.onZoom,
+          zoom = _this$props4.zoom;
 
       if (!onZoom) {
         return;
@@ -744,9 +764,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       var _this$state = this.state,
           selected = _this$state.selected,
           coords = _this$state.coords;
-      var _this$props4 = this.props,
-          snap = _this$props4.snap,
-          screen = _this$props4.screen;
+      var _this$props5 = this.props,
+          snap = _this$props5.snap,
+          screen = _this$props5.screen;
       var sign,
           index = code === 37 || code === 39 ? 0 : 1;
       var id = selected;
@@ -816,9 +836,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "getBackground",
     value: function getBackground() {
-      var _this$props5 = this.props,
-          snap = _this$props5.snap,
-          zoom = _this$props5.zoom;
+      var _this$props6 = this.props,
+          snap = _this$props6.snap,
+          zoom = _this$props6.zoom;
 
       var _snap = _slicedToArray(snap, 3),
           x = _snap[0],
@@ -842,25 +862,6 @@ var RPGraph = /*#__PURE__*/function (_Component) {
         backgroundSize: "".concat(a, "px ").concat(a, "px,").concat(a, "px ").concat(a, "px,").concat(b, " ").concat(c, ",").concat(b, " ").concat(c),
         backgroundPosition: screen[0] + 'px ' + screen[1] + 'px'
       };
-    }
-  }, {
-    key: "mouseMove",
-    value: function mouseMove(e) {
-      var getMousePosition = this.props.getMousePosition;
-
-      if (!getMousePosition) {
-        return;
-      }
-
-      var client = this.getClient(e);
-      var _this$props6 = this.props,
-          screen = _this$props6.screen,
-          zoom = _this$props6.zoom;
-      var dom = (0, _jquery.default)(this.dom.current);
-      var offset = dom.offset();
-      var x = Math.round((client.x - offset.left) / zoom - screen[0]);
-      var y = Math.round((client.y - offset.top) / zoom - screen[1]);
-      getMousePosition([x, y]);
     }
   }, {
     key: "render",
@@ -919,8 +920,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
         onWheel: this.wheel.bind(this),
         onKeyDown: this.keyDown.bind(this)
       }, eventProps, {
-        id: id,
-        onMouseMove: this.mouseMove.bind(this)
+        id: id
       }), /*#__PURE__*/_react.default.createElement("div", {
         className: "r-floater-container",
         style: this.getStyle()
