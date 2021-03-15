@@ -303,18 +303,39 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "componentDidMount",
     value: function componentDidMount() {
+      var _this2 = this;
+
       var getMousePosition = this.props.getMousePosition;
 
       if (getMousePosition) {
-        this.eventHandler('window', 'mousemove', _jquery.default.proxy(this.mouseMove, this));
+        this.eventHandler('window', 'mousemove', function (e) {
+          return getMousePosition(_this2.getMousePosition(e));
+        });
       }
 
       this.update();
     }
   }, {
-    key: "mouseMove",
-    value: function mouseMove(e) {
-      var getMousePosition = this.props.getMousePosition;
+    key: "dragOver",
+    value: function dragOver(e) {
+      var onDragOver = this.props.onDragOver;
+
+      if (onDragOver) {
+        onDragOver(e, this.getMousePosition(e));
+      }
+    }
+  }, {
+    key: "drop",
+    value: function drop(e) {
+      var onDrop = this.props.onDrop;
+
+      if (onDrop) {
+        onDrop(e, this.getMousePosition(e));
+      }
+    }
+  }, {
+    key: "getMousePosition",
+    value: function getMousePosition(e) {
       var client = this.getClient(e);
       var _this$props2 = this.props,
           screen = _this$props2.screen,
@@ -323,7 +344,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       var offset = dom.offset();
       var x = Math.round((client.x - offset.left) / zoom - screen[0]);
       var y = Math.round((client.y - offset.top) / zoom - screen[1]);
-      getMousePosition([x, y]);
+      return [x, y];
     }
   }, {
     key: "getText",
@@ -866,7 +887,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "render",
     value: function render() {
-      var _this2 = this;
+      var _this3 = this;
 
       var _this$props7 = this.props,
           items = _this$props7.items,
@@ -883,20 +904,20 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           selected = _this$state2.selected;
       getCoords(coords);
       var Items = items.filter(function (item) {
-        return _this2.isVisible(item);
+        return _this3.isVisible(item);
       }).map(function (item, i) {
         var id = item.id;
-        coords[id] = coords[id] || _this2.getCoord(item, true).concat(item);
+        coords[id] = coords[id] || _this3.getCoord(item, true).concat(item);
         var coord = coords[id];
         var props = {
           key: i,
           className: 'r-floater-item' + (id === selected ? ' selected' : ''),
           id: item.id,
           onMouseDown: function onMouseDown(e) {
-            return _this2.itemMouseDown(e, item, id, i);
+            return _this3.itemMouseDown(e, item, id, i);
           },
           onTouchStart: function onTouchStart(e) {
-            return _this2.itemMouseDown(e, item, id, i);
+            return _this3.itemMouseDown(e, item, id, i);
           },
           style: {
             left: coord[0] + screen[0],
@@ -920,7 +941,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
         onWheel: this.wheel.bind(this),
         onKeyDown: this.keyDown.bind(this)
       }, eventProps, {
-        id: id
+        id: id,
+        onDragOver: this.dragOver.bind(this),
+        onDrop: this.drop.bind(this)
       }), /*#__PURE__*/_react.default.createElement("div", {
         className: "r-floater-container",
         style: this.getStyle()

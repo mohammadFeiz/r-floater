@@ -100,19 +100,26 @@ export default class RPGraph extends Component {
   componentDidMount(){
     var {getMousePosition} = this.props;
     if(getMousePosition){
-      this.eventHandler('window','mousemove',$.proxy(this.mouseMove,this));
+      this.eventHandler('window','mousemove',(e)=>getMousePosition(this.getMousePosition(e)));
     }
     this.update();
   } 
-  mouseMove(e){
-    var {getMousePosition} = this.props;
+  dragOver(e){
+    var {onDragOver} = this.props;
+    if(onDragOver){onDragOver(e,this.getMousePosition(e))}
+  }
+  drop(e){
+    var {onDrop} = this.props;
+    if(onDrop){onDrop(e,this.getMousePosition(e))}
+  }
+  getMousePosition(e){
     var client = this.getClient(e);
     var {screen,zoom} = this.props;
     var dom = $(this.dom.current);
     var offset = dom.offset()
     var x = Math.round((client.x - offset.left) / zoom - screen[0])
     var y = Math.round((client.y - offset.top) / zoom - screen[1])
-    getMousePosition([x,y]);
+    return [x,y];
   }
   
   getText({x1,y1,x2,y2,text,line}){ 
@@ -361,7 +368,7 @@ export default class RPGraph extends Component {
         onMouseDown:(e)=>this.itemMouseDown(e,item,id,i),
         onTouchStart:(e)=>this.itemMouseDown(e,item,id,i),
         style:{left:coord[0] + screen[0],top:coord[1] + screen[1]},
-        draggable:false
+        draggable:false,
       }
       return <div {...props}>{item.template}</div>;
     });
@@ -372,6 +379,8 @@ export default class RPGraph extends Component {
         ref={this.dom} className={"r-floater" + (className?' ' + className:'')} style={style} tabIndex={0} 
         onWheel={this.wheel.bind(this)} 
         onKeyDown={this.keyDown.bind(this)} {...eventProps} id={id}
+        onDragOver={this.dragOver.bind(this)}
+        onDrop={this.drop.bind(this)}
       >    
         <div className='r-floater-container' style={this.getStyle()}>
           <svg className='r-floater-svg' onMouseDown={this.svgMouseDown.bind(this)} onTouchStart={this.svgMouseDown.bind(this)}></svg>
