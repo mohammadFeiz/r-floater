@@ -87,10 +87,10 @@ class Panel extends Component{
   relations={{
     'panel1':[
       {to:'panel2',text:'5.2%'},
-      {to:'panel3',text:'13%',type:'toBottom'},
-      {to:'panel4',text:'33.3%',type:'toBottom'},
-      {to:'panel5',text:'33.3%',type:'toBottom'},
-      {to:'panel6',text:'33.3%',type:'toBottom'},
+      {to:'panel3',text:'13%'},
+      {to:'panel4',text:'33.3%'},
+      {to:'panel5',text:'33.3%'},
+      {to:'panel6',text:'33.3%'},
     ],
     'panel2':[
       {to:'panel7',text:'5.2%'},
