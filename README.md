@@ -53,7 +53,7 @@ move             | Boolean                                                      
 />
 
 ```
-
+[![alt text](/images/1-1.jpg)]()
 
 #### Panel Component
 ``` javascript
