@@ -79,6 +79,31 @@ class Panel extends Component{
   }
 }
 ```
+### relations props
+#### Example
+``` javascript
+<RFloater 
+  ...
+  relations={{
+    'panel1':[
+      {to:'panel2',text:'5.2%'},
+      {to:'panel3',text:'13%',type:'toBottom'},
+      {to:'panel4',text:'33.3%',type:'toBottom'},
+      {to:'panel5',text:'33.3%',type:'toBottom'},
+      {to:'panel6',text:'33.3%',type:'toBottom'},
+    ],
+    'panel2':[
+      {to:'panel7',text:'5.2%'},
+      {to:'panel8',text:'13%'},
+      {to:'panel9',text:'33.3%'},
+      {to:'panel10',text:'33.3%'},
+      {to:'panel11',text:'33.3%'},
+    ]
+  }}
+  ...
+/>
+```
+
 
 ### zoom props
 #### Example
