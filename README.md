@@ -79,3 +79,13 @@ class Panel extends Component{
   }
 }
 ```
+
+### zoom props
+#### Example
+``` javascript
+<RFloater 
+  ...
+  zoom={0.4}
+  ...
+/>
+```
