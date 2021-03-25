@@ -23,6 +23,8 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 
 function _extends() { _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
 
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
 function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest(); }
 
 function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
@@ -67,12 +69,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
 
     _this = _super.call(this, props);
     _this.touch = 'ontouchstart' in document.documentElement;
-    var _this$props = _this.props,
-        items = _this$props.items,
-        _this$props$simpleCon = _this$props.simpleConnect,
-        simpleConnect = _this$props$simpleCon === void 0 ? false : _this$props$simpleCon;
+    var items = _this.props.items;
     _this.dom = /*#__PURE__*/(0, _react.createRef)();
-    _this.downMode = false;
+    _this.isDown = false;
     _this.state = {
       coords: _this.getCoords(items),
       selected: false,
@@ -82,25 +81,167 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }
 
   _createClass(RPGraph, [{
+    key: "svgMouseDownTouch",
+    value: function svgMouseDownTouch(e) {
+      var selected = this.state.selected;
+
+      if (selected !== false) {
+        this.setState({
+          selected: false
+        });
+      }
+    }
+  }, {
+    key: "touchMouseDown",
+    value: function touchMouseDown(e) {
+      this.touchOffset = false; // در موو این مقدار پر می شود و در اند اعمال می شود. پس در هر استارتی باید ریست شود
+
+      if (this.isDown) {
+        //اگر انگشت دوم داره تاچ می کنه
+        //اگر روی آیتمی تاچ شده تاچ اندش رو اجرا کن
+        if (this.itemDown) {
+          this.itemMouseUp();
+        }
+
+        this.eventHandler('window', 'mousemove', _jquery.default.proxy(this.touchMouseMove, this));
+        this.mousePosition = this.getMousePosition(e);
+        var _this$props = this.props,
+            zoom = _this$props.zoom,
+            screen = _this$props.screen,
+            moveHandleClassName = _this$props.moveHandleClassName;
+
+        if (!moveHandleClassName) {
+          return;
+        }
+
+        var x = e.changedTouches[0].clientX;
+        var y = e.changedTouches[0].clientY;
+        var touchId = e.changedTouches[0].identifier;
+        this.distance = false;
+        this.newZoom = zoom;
+
+        if (e.changedTouches[1]) {
+          var X = e.changedTouches[1].clientX;
+          var Y = e.changedTouches[1].clientY;
+          distance = Math.round(Math.sqrt(Math.pow(x - X, 2) + Math.pow(y - Y, 2)));
+        }
+
+        this.so = {
+          zoom: zoom,
+          touchId: touchId,
+          x: x,
+          y: y,
+          screen: [screen[0], screen[1]]
+        };
+      } else {
+        this.isDown = true;
+      }
+
+      this.eventHandler('window', 'mouseup', _jquery.default.proxy(this.touchMouseUp, this));
+    }
+  }, {
+    key: "touchMouseMove",
+    value: function touchMouseMove(e) {
+      var onPan = this.props.onPan;
+
+      if (!onPan) {
+        return;
+      }
+
+      var _this$so = this.so,
+          x = _this$so.x,
+          y = _this$so.y,
+          screen = _this$so.screen,
+          touchId = _this$so.touchId,
+          zoom = _this$so.zoom;
+      var touch1, touch2;
+
+      if (e.changedTouches[0]) {
+        if (e.changedTouches[0].identifier === touchId) {
+          touch1 = e.changedTouches[0];
+        } else {
+          touch2 = e.changedTouches[0];
+        }
+      }
+
+      if (e.changedTouches[1]) {
+        if (e.changedTouches[1].identifier === touchId) {
+          touch1 = e.changedTouches[1];
+        } else {
+          touch2 = e.changedTouches[1];
+        }
+      }
+
+      if (touch1) {
+        var X = touch1.clientX;
+        var Y = touch1.clientY;
+        var offsetX = X - x;
+        var offsetY = Y - y;
+        this.touchOffset = [(X - x) / zoom + screen[0], (Y - y) / zoom + screen[1]];
+        (0, _jquery.default)(this.dom.current).find('line,path,.r-floater-item,text').css('transform', "translate(".concat(offsetX / zoom, "px,").concat(offsetY / zoom, "px)"));
+
+        if (touch2) {
+          var X1 = touch2.clientX;
+          var Y1 = touch2.clientY;
+
+          var _distance = Math.round(Math.sqrt(Math.pow(X1 - X, 2) + Math.pow(Y1 - Y, 2)));
+
+          if (this.distance === false) {
+            this.distance = _distance;
+          }
+
+          var delta = Math.floor((_distance - this.distance) / 40) / 10;
+          var newZoom = parseFloat((zoom + delta).toFixed(1));
+
+          if (newZoom < 0.1) {
+            newZoom = 0.1;
+          } else if (newZoom > 8) {
+            newZoom = 8;
+          }
+
+          if (this.newZoom !== newZoom) {
+            this.newZoom = newZoom;
+            this.zoom(newZoom, true);
+          }
+        }
+      }
+    }
+  }, {
+    key: "touchMouseUp",
+    value: function touchMouseUp() {
+      this.isDown = false;
+      this.distance = false;
+
+      if (this.touchOffset !== false) {
+        (0, _jquery.default)(this.dom.current).find('line,path,.r-floater-item,text').css('transform', 'unset');
+        this.props.onPan(this.touchOffset);
+        this.touchOffset = false;
+      }
+
+      this.eventHandler('window', 'mousemove', this.touchMouseMove, 'unbind');
+      this.eventHandler('window', 'mouseup', this.touchMouseUp, 'unbind');
+    }
+  }, {
     key: "getClient",
     value: function getClient(e) {
-      var index = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
-
       if (this.touch) {
-        if (!e.changedTouches[index]) {
+        var _e$changedTouches = e.changedTouches,
+            changedTouches = _e$changedTouches === void 0 ? [] : _e$changedTouches;
+
+        if (!changedTouches[0]) {
           return false;
         }
 
         return {
-          x: e.changedTouches[index].clientX,
-          y: e.changedTouches[index].clientY
-        };
-      } else {
-        return {
-          x: e.clientX,
-          y: e.clientY
+          x: changedTouches[0].clientX,
+          y: changedTouches[0].clientY
         };
       }
+
+      return {
+        x: e.clientX,
+        y: e.clientY
+      };
     }
   }, {
     key: "getOffset",
@@ -114,35 +255,14 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           startY = _ref4[1];
 
       var zoom = this.props.zoom;
-      var client = this.getClient(e, this.multiTouch ? 1 : 0);
+      var client = this.getClient(e);
       return [(client.x - x) / zoom + startX, (client.y - y) / zoom + startY];
-    }
-  }, {
-    key: "getMTO",
-    value: function getMTO(e) {
-      var t1 = this.getClient(e, 0);
-      var t2 = this.getClient(e, 1);
-
-      if (t1 === false || t2 === false) {
-        return false;
-      }
-
-      return Math.round(Math.sqrt(Math.pow(t1.x - t2.x, 2) + Math.pow(t1.y - t2.y, 2)));
     }
   }, {
     key: "svgMouseDown",
     value: function svgMouseDown(e) {
-      if (this.downMode !== false) {
-        this.itemMouseUp();
-        this.svgMouseUp();
-        this.multiTouch = true;
-        this.mto = false;
-        this.startZoom = this.props.zoom;
-        this.svgMouseDown(e, true);
-        return;
-      }
-
-      this.downMode = 'svg';
+      this.mousePosition = this.getMousePosition(e);
+      this.offset = false;
       var _this$props2 = this.props,
           screen = _this$props2.screen,
           moveHandleClassName = _this$props2.moveHandleClassName;
@@ -164,20 +284,14 @@ var RPGraph = /*#__PURE__*/function (_Component) {
     }
   }, {
     key: "itemMouseDown",
-    value: function itemMouseDown(e, item, id, index) {
-      if (this.downMode !== false) {
-        this.itemMouseUp();
-        this.svgMouseUp();
-        this.multiTouch = true;
-        this.mto = false;
-        this.startZoom = this.props.zoom;
-        this.svgMouseDown(e);
+    value: function itemMouseDown(e, item, id) {
+      if (this.itemDown) {
         return;
       }
 
-      this.downMode = 'item';
+      this.mousePosition = this.getMousePosition(e);
 
-      if (!this.touch && e.button === 1) {
+      if (e.button === 1) {
         this.svgMouseDown(e);
         return;
       }
@@ -205,25 +319,30 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       (0, _jquery.default)(e.currentTarget).css({
         zIndex: 10
       });
-      var client = this.getClient(e);
       this.so = {
-        x: client.x,
-        y: client.y,
-        items: []
+        items: [],
+        mx: this.mousePosition[0],
+        my: this.mousePosition[1]
       };
+      var container = (0, _jquery.default)(this.dom.current);
 
       for (var i = 0; i < ids.length; i++) {
         var coord = coords[ids[i]];
         var itm = this.getItemById(ids[i]);
+        var dom = container.find('#' + ids[i]);
+        var cssLeft = parseInt(dom.css('left'));
+        var cssTop = parseInt(dom.css('top'));
         this.so.items.push({
-          coord: coord,
           left: coord[0],
           top: coord[1],
           id: ids[i],
-          item: itm
+          item: itm,
+          cssLeft: cssLeft,
+          cssTop: cssTop
         });
       }
 
+      this.itemDown = true;
       this.eventHandler('window', 'mousemove', _jquery.default.proxy(this.itemMouseMove, this));
       this.eventHandler('window', 'mouseup', _jquery.default.proxy(this.itemMouseUp, this));
     }
@@ -232,8 +351,6 @@ var RPGraph = /*#__PURE__*/function (_Component) {
     value: function svgMouseMove(e) {
       var _this$props3 = this.props,
           onPan = _this$props3.onPan,
-          Screen = _this$props3.screen,
-          onZoom = _this$props3.onZoom,
           zoom = _this$props3.zoom;
 
       if (!onPan) {
@@ -241,57 +358,27 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       }
 
       this.svgMoved = true;
-      var _this$so = this.so,
-          x = _this$so.x,
-          y = _this$so.y,
-          screen = _this$so.screen;
-      var offset = this.getOffset(e, [x, y], screen);
-      var diff = Math.sqrt(Math.pow(offset[0] - Screen[0], 2) + Math.pow(offset[1] - Screen[1], 2));
-
-      if (diff < 100 / zoom) {
-        onPan(offset);
-      }
-
-      if (this.multiTouch) {
-        var mto = this.getMTO(e);
-
-        if (mto !== false) {
-          if (this.mto === false) {
-            this.mto = mto;
-          }
-
-          var zoomOffset = (mto - this.mto) / 200;
-          var newZoom = parseFloat((this.startZoom + zoomOffset).toFixed(1));
-
-          if (newZoom > 8) {
-            newZoom = 8;
-          } else if (newZoom < 0.3) {
-            newZoom = 0.3;
-          }
-
-          var dom = (0, _jquery.default)(this.dom.current);
-          var width = dom.width();
-          var height = dom.height();
-          var zoomScreen = [(1 - newZoom) * width / newZoom / 2, (1 - newZoom) * height / newZoom / 2];
-          onZoom(newZoom);
-          this.setState({
-            zoomScreen: zoomScreen
-          });
-        }
-      }
+      var _this$so2 = this.so,
+          x = _this$so2.x,
+          y = _this$so2.y,
+          screen = _this$so2.screen;
+      var client = this.getClient(e);
+      var offsetX = client.x - x;
+      var offsetY = client.y - y;
+      this.offset = this.getOffset(e, [x, y], screen);
+      (0, _jquery.default)(this.dom.current).find('line,path,.r-floater-item,text').css('transform', "translate(".concat(offsetX / zoom, "px,").concat(offsetY / zoom, "px)"));
     }
   }, {
     key: "svgMouseUp",
     value: function svgMouseUp() {
-      this.multiTouch = false;
-
-      if (this.downMode === false) {
-        return;
-      }
-
-      this.downMode = false;
       this.eventHandler('window', 'mousemove', this.svgMouseMove, 'unbind');
       this.eventHandler('window', 'mouseup', this.svgMouseUp, 'unbind');
+
+      if (this.offset !== false) {
+        (0, _jquery.default)(this.dom.current).find('line,path,.r-floater-item,text').css('transform', 'unset');
+        this.props.onPan(this.offset);
+        this.offset = false;
+      }
 
       if (this.svgMoved === false) {
         var selected = this.state.selected;
@@ -306,48 +393,59 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "itemMouseMove",
     value: function itemMouseMove(e) {
-      var move = this.props.move;
+      var _this$props4 = this.props,
+          move = _this$props4.move,
+          liveChange = _this$props4.liveChange;
+      var coords = this.state.coords;
 
       if (move === false) {
         return;
       }
 
-      var coords = this.state.coords,
-          _this$so2 = this.so,
-          x = _this$so2.x,
-          y = _this$so2.y,
-          items = _this$so2.items;
+      var _this$so3 = this.so,
+          items = _this$so3.items,
+          mx = _this$so3.mx,
+          my = _this$so3.my;
+      var container = (0, _jquery.default)(this.dom.current);
+      this.mousePosition = this.getMousePosition(e);
 
       for (var i = 0; i < items.length; i++) {
         var _items$i = items[i],
-            coord = _items$i.coord,
             left = _items$i.left,
             top = _items$i.top,
-            item = _items$i.item;
+            item = _items$i.item,
+            id = _items$i.id,
+            cssLeft = _items$i.cssLeft,
+            cssTop = _items$i.cssTop;
 
         if (item.move === false) {
           continue;
         }
 
-        var offset = this.getOffset(e, [x, y], [left, top]);
-        coord[0] = offset[0];
-        coord[1] = offset[1];
+        var offsetX = this.mousePosition[0] - mx,
+            offsetY = this.mousePosition[1] - my;
+        var coord = coords[id];
+        coord[0] = offsetX + left;
+        coord[1] = offsetY + top;
+
+        if (!liveChange) {
+          container.find('#' + id).css({
+            left: cssLeft + offsetX,
+            top: cssTop + offsetY
+          });
+        }
       }
 
-      this.setState({
-        coords: coords
-      });
+      if (liveChange) {
+        this.setState({
+          coords: coords
+        });
+      }
     }
   }, {
     key: "itemMouseUp",
     value: function itemMouseUp() {
-      this.multiTouch = false;
-
-      if (this.downMode === false) {
-        return;
-      }
-
-      this.downMode = false;
+      this.itemDown = false;
       this.eventHandler('window', 'mousemove', this.itemMouseMove, 'unbind');
       this.eventHandler('window', 'mouseup', this.itemMouseUp, 'unbind');
       (0, _jquery.default)('.r-floater-item').css({
@@ -357,6 +455,48 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       (0, _jquery.default)('.r-floater-item').css({
         transition: '0s'
       });
+    }
+  }, {
+    key: "fixCoords",
+    value: function fixCoords() {
+      if (!this.so || !this.so.items) {
+        return;
+      }
+
+      var liveChange = this.props.liveChange;
+      var items = this.so.items;
+      var coords = this.state.coords;
+      var screen = this.getScreen();
+      var container = (0, _jquery.default)(this.dom.current);
+      var changes = [];
+
+      for (var i = 0; i < items.length; i++) {
+        var _items$i2 = items[i],
+            id = _items$i2.id,
+            item = _items$i2.item,
+            coord = coords[id];
+        coord[0] = this.getSnapedCoord(0, coord[0]);
+        coord[1] = this.getSnapedCoord(1, coord[1]);
+        var dom = container.find('#' + id);
+        dom.css({
+          left: coord[0] + screen[0],
+          top: coord[1] + screen[1]
+        });
+        changes.push({
+          item: item,
+          id: id,
+          left: coord[0],
+          top: coord[1]
+        });
+      }
+
+      this.setState({
+        coords: coords
+      });
+
+      if (this.props.onChange) {
+        this.props.onChange(changes, coords);
+      }
     }
   }, {
     key: "eventHandler",
@@ -377,7 +517,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
     }
   }, {
     key: "getCoord",
-    value: function getCoord(_ref5, init) {
+    value: function getCoord(_ref5) {
       var _ref5$left = _ref5.left,
           left = _ref5$left === void 0 ? 0 : _ref5$left,
           _ref5$top = _ref5.top,
@@ -480,8 +620,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           x2: toArea.left + (_this2.getSortedIndex(dict[to].tops, i) + 1) / (dict[to].tops.length + 1) * toArea.width,
           y1: fromArea.bottom,
           y2: toArea.top,
-          direction: 1,
-          type: 1,
+          direction: 'bottom',
           index: i,
           from: from,
           to: to
@@ -503,7 +642,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           x2: toArea.center.x,
           y1: fromArea.bottom,
           y2: toArea.top,
-          direction: 1,
+          direction: 'bottom',
           type: 1,
           index: i,
           from: from,
@@ -530,8 +669,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           x2: toArea.left + (_this3.getSortedIndex(dict[to].bottoms, i) + 1) / (dict[to].bottoms.length + 1) * toArea.width,
           y1: fromArea.top,
           y2: toArea.bottom,
-          direction: -1,
-          type: 1,
+          direction: 'top',
           index: i,
           from: from,
           to: to
@@ -553,8 +691,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           x2: toArea.center.x,
           y1: fromArea.top,
           y2: toArea.bottom,
-          direction: -1,
-          type: 1,
+          direction: 'top',
           index: i,
           from: from,
           to: to
@@ -580,8 +717,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           y2: toArea.top + (_this4.getSortedIndex(dict[to].lefts, i) + 1) / (dict[to].lefts.length + 1) * toArea.height,
           x1: fromArea.right,
           x2: toArea.left,
-          direction: 1,
-          type: 2,
+          direction: 'right',
           index: i,
           from: from,
           to: to
@@ -603,8 +739,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           y2: toArea.center.y,
           x1: fromArea.right,
           x2: toArea.left,
-          direction: 1,
-          type: 2,
+          direction: 'right',
           index: i,
           from: from,
           to: to
@@ -630,8 +765,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           y2: toArea.top + (_this5.getSortedIndex(dict[to].rights, i) + 1) / (dict[to].rights.length + 1) * toArea.height,
           x1: fromArea.left,
           x2: toArea.right,
-          direction: -1,
-          type: 2,
+          direction: 'left',
           index: i,
           from: from,
           to: to
@@ -653,8 +787,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           y2: toArea.center.y,
           x1: fromArea.left,
           x2: toArea.right,
-          direction: -1,
-          type: 2,
+          direction: 'left',
           index: i,
           from: from,
           to: to
@@ -664,9 +797,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "getRelationsCoords",
     value: function getRelationsCoords() {
-      var _this$props4 = this.props,
-          relations = _this$props4.relations,
-          simpleConnect = _this$props4.simpleConnect,
+      var _this$props5 = this.props,
+          relations = _this$props5.relations,
+          simpleConnect = _this$props5.simpleConnect,
           coords = this.state.coords,
           dict = {},
           Relations = [];
@@ -734,11 +867,21 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       return Relations;
     }
   }, {
+    key: "renderRelation",
+    value: function renderRelation(id, index) {
+      var ext = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+      var obj = { ...this.relations[id][index],
+        ...ext
+      };
+      return this.getLine(obj) + this.getArrow(obj);
+    }
+  }, {
     key: "update",
     value: function update() {
       var relationsCoords = this.getRelationsCoords();
       var relations = this.props.relations;
       var svg;
+      this.relations = {};
 
       for (var i = 0; i < relationsCoords.length; i++) {
         var props = relationsCoords[i]();
@@ -772,7 +915,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           textTop: textTop,
           textLeft: textLeft
         };
-        svg += this.getLine(obj) + this.getArrow(obj);
+        this.relations[props.from] = this.relations[props.from] || [];
+        this.relations[props.from][props.index] = obj;
+        svg += this.renderRelation(props.from, props.index);
       }
 
       (0, _jquery.default)('.r-floater svg').html(svg);
@@ -839,7 +984,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           y1 = _ref17.y1,
           x2 = _ref17.x2,
           y2 = _ref17.y2,
-          type = _ref17.type,
+          direction = _ref17.direction,
           fontSize = _ref17.fontSize,
           lineDash = _ref17.lineDash,
           lineColor = _ref17.lineColor,
@@ -847,7 +992,8 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           fontColor = _ref17.fontColor,
           text = _ref17.text,
           textTop = _ref17.textTop,
-          textLeft = _ref17.textLeft;
+          textLeft = _ref17.textLeft,
+          arrowSize = _ref17.arrowSize;
       var cx = (x1 + x2) / 2,
           cy = (y1 + y2) / 2;
       var start = "<line stroke=\"".concat(lineColor, "\" stroke-width=\"").concat(lineWidth, "\" stroke-dasharray=\"").concat(lineDash, "\" ");
@@ -855,16 +1001,28 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           tx,
           ty;
 
-      if (type === 1) {
+      if (direction === 'bottom') {
         str += "".concat(start, "x1=\"").concat(x1, "\" y1=\"").concat(y1, "\" x2=\"").concat(x1, "\" y2=\"").concat(cy, "\" />");
         str += "".concat(start, "x1=\"").concat(x1, "\" y1=\"").concat(cy, "\" x2=\"").concat(x2, "\" y2=\"").concat(cy, "\" />");
-        str += "".concat(start, "x1=\"").concat(x2, "\" y1=\"").concat(cy, "\" x2=\"").concat(x2, "\" y2=\"").concat(y2, "\" />");
+        str += "".concat(start, "x1=\"").concat(x2, "\" y1=\"").concat(cy, "\" x2=\"").concat(x2, "\" y2=\"").concat(y2 - arrowSize[0], "\" />");
         tx = x2;
         ty = cy;
+      } else if (direction === 'top') {
+        str += "".concat(start, "x1=\"").concat(x1, "\" y1=\"").concat(y1, "\" x2=\"").concat(x1, "\" y2=\"").concat(cy, "\" />");
+        str += "".concat(start, "x1=\"").concat(x1, "\" y1=\"").concat(cy, "\" x2=\"").concat(x2, "\" y2=\"").concat(cy, "\" />");
+        str += "".concat(start, "x1=\"").concat(x2, "\" y1=\"").concat(cy, "\" x2=\"").concat(x2, "\" y2=\"").concat(y2 + arrowSize[0], "\" />");
+        tx = x2;
+        ty = cy;
+      } else if (direction === 'right') {
+        str += "".concat(start, "x1=\"").concat(x1, "\" y1=\"").concat(y1, "\" x2=\"").concat(cx, "\" y2=\"").concat(y1, "\" />");
+        str += "".concat(start, "x1=\"").concat(cx, "\" y1=\"").concat(y1, "\" x2=\"").concat(cx, "\" y2=\"").concat(y2, "\" />");
+        str += "".concat(start, "x1=\"").concat(cx, "\" y1=\"").concat(y2, "\" x2=\"").concat(x2 - arrowSize[1], "\" y2=\"").concat(y2, "\" />");
+        tx = cx;
+        ty = y2;
       } else {
         str += "".concat(start, "x1=\"").concat(x1, "\" y1=\"").concat(y1, "\" x2=\"").concat(cx, "\" y2=\"").concat(y1, "\" />");
         str += "".concat(start, "x1=\"").concat(cx, "\" y1=\"").concat(y1, "\" x2=\"").concat(cx, "\" y2=\"").concat(y2, "\" />");
-        str += "".concat(start, "x1=\"").concat(cx, "\" y1=\"").concat(y2, "\" x2=\"").concat(x2, "\" y2=\"").concat(y2, "\" />");
+        str += "".concat(start, "x1=\"").concat(cx, "\" y1=\"").concat(y2, "\" x2=\"").concat(x2 + arrowSize[1], "\" y2=\"").concat(y2, "\" />");
         tx = cx;
         ty = y2;
       }
@@ -881,7 +1039,6 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           x2 = _ref18.x2,
           y2 = _ref18.y2,
           arrowSize = _ref18.arrowSize,
-          type = _ref18.type,
           direction = _ref18.direction,
           fontSize = _ref18.fontSize,
           textTop = _ref18.textTop,
@@ -891,7 +1048,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           lineWidth = _ref18.lineWidth,
           fontColor = _ref18.fontColor,
           text = _ref18.text;
-      var start = "<path fill=\"none\" stroke=\"".concat(lineColor, "\" stroke-width=\"").concat(lineWidth, "\" stroke-dasharray=\"").concat(lineDash, "\" ");
+      var start = "<path fill=\"transparent\" stroke=\"".concat(lineColor, "\" stroke-width=\"").concat(lineWidth, "\" stroke-dasharray=\"").concat(lineDash, "\" ");
       var str = '';
       var cx = (x1 + x2) / 2,
           cy = (y1 + y2) / 2,
@@ -900,15 +1057,29 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           q1,
           q2;
 
-      if (type === 1) {
-        y2 = y2 + -arrowSize[0] * direction;
+      if (direction === 'bottom') {
+        y2 = y2 - arrowSize[0];
         dest1 = [cx - x1, cy - y1];
         dest2 = [x2 - cx, y2 - cy];
         q1 = [0, (cy - y1) / 2];
         q2 = [x2 - cx, (y2 - cy) / 2];
         str += "".concat(start, "d=\"M").concat(x1, ",").concat(y1, " q").concat(q1[0], ",").concat(q1[1], ",").concat(dest1[0], ",").concat(dest1[1], " q").concat(q2[0], ",").concat(q2[1], ",").concat(dest2[0], ",").concat(dest2[1], "\" />");
+      } else if (direction === 'top') {
+        y2 = y2 + arrowSize[0];
+        dest1 = [cx - x1, cy - y1];
+        dest2 = [x2 - cx, y2 - cy];
+        q1 = [0, (cy - y1) / 2];
+        q2 = [x2 - cx, (y2 - cy) / 2];
+        str += "".concat(start, "d=\"M").concat(x1, ",").concat(y1, " q").concat(q1[0], ",").concat(q1[1], ",").concat(dest1[0], ",").concat(dest1[1], " q").concat(q2[0], ",").concat(q2[1], ",").concat(dest2[0], ",").concat(dest2[1], "\" />");
+      } else if (direction === 'right') {
+        x2 = x2 - arrowSize[1];
+        dest1 = [cx - x1, cy - y1];
+        dest2 = [x2 - cx, y2 - cy];
+        q1 = [(cx - x1) / 2, 0];
+        q2 = [(x2 - cx) / 2, y2 - cy];
+        str += "".concat(start, "d=\"M").concat(x1, ",").concat(y1, " q").concat(q1[0], ",").concat(q1[1], ",").concat(dest1[0], ",").concat(dest1[1], " q").concat(q2[0], ",").concat(q2[1], ",").concat(dest2[0], ",").concat(dest2[1], "\" />");
       } else {
-        x2 = x2 + -arrowSize[1] * direction;
+        x2 = x2 + arrowSize[1];
         dest1 = [cx - x1, cy - y1];
         dest2 = [x2 - cx, y2 - cy];
         q1 = [(cx - x1) / 2, 0];
@@ -958,26 +1129,21 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       var x2 = _ref20.x2,
           y2 = _ref20.y2,
           arrowSize = _ref20.arrowSize,
-          type = _ref20.type,
           lineColor = _ref20.lineColor,
           direction = _ref20.direction;
 
-      if (type === 1) {
-        if (direction === -1) {
-          //top
-          return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 - arrowSize[0] / 2, ",").concat(y2 + arrowSize[1], " L").concat(x2 + arrowSize[0] / 2, ",").concat(y2 + arrowSize[1], " Z\" fill=\"").concat(lineColor, "\"/>");
-        } else {
-          //bottom
-          return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 - arrowSize[0] / 2, ",").concat(y2 - arrowSize[1], " L").concat(x2 + arrowSize[0] / 2, ",").concat(y2 - arrowSize[1], " Z\" fill=\"").concat(lineColor, "\"/>");
-        }
+      if (direction === 'top') {
+        //top
+        return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 - arrowSize[0] / 2, ",").concat(y2 + arrowSize[1], " L").concat(x2 + arrowSize[0] / 2, ",").concat(y2 + arrowSize[1], " Z\" fill=\"").concat(lineColor, "\"/>");
+      } else if (direction === 'bottom') {
+        //bottom
+        return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 - arrowSize[0] / 2, ",").concat(y2 - arrowSize[1], " L").concat(x2 + arrowSize[0] / 2, ",").concat(y2 - arrowSize[1], " Z\" fill=\"").concat(lineColor, "\"/>");
+      } else if (direction === 'left') {
+        //left
+        return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 + arrowSize[1], ",").concat(y2 - arrowSize[0] / 2, " L").concat(x2 + arrowSize[1], ",").concat(y2 + arrowSize[0] / 2, " Z\" fill=\"").concat(lineColor, "\"/>");
       } else {
-        if (direction === -1) {
-          //left
-          return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 + arrowSize[1], ",").concat(y2 - arrowSize[0] / 2, " L").concat(x2 + arrowSize[1], ",").concat(y2 + arrowSize[0] / 2, " Z\" fill=\"").concat(lineColor, "\"/>");
-        } else {
-          //right
-          return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 - arrowSize[1], ",").concat(y2 - arrowSize[0] / 2, " L").concat(x2 - arrowSize[1], ",").concat(y2 + arrowSize[0] / 2, " Z\" fill=\"").concat(lineColor, "\"/>");
-        }
+        //right
+        return "<path d=\"M".concat(x2, ",").concat(y2, " L").concat(x2 - arrowSize[1], ",").concat(y2 - arrowSize[0] / 2, " L").concat(x2 - arrowSize[1], ",").concat(y2 + arrowSize[0] / 2, " Z\" fill=\"").concat(lineColor, "\"/>");
       }
     }
   }, {
@@ -993,14 +1159,8 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "componentDidMount",
     value: function componentDidMount() {
-      var _this6 = this;
-
-      var getMousePosition = this.props.getMousePosition;
-
-      if (getMousePosition) {
-        this.eventHandler('window', 'mousemove', function (e) {
-          return getMousePosition(_this6.getMousePosition(e));
-        });
+      if (this.touch) {
+        this.eventHandler('.r-floater-container', 'mousedown', _jquery.default.proxy(this.touchMouseDown, this));
       }
 
       this.update();
@@ -1028,13 +1188,19 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           screen = this.getScreen(),
           dom = (0, _jquery.default)(this.dom.current);
 
-      if (dom.length === 0) {
+      if (dom.length === 0 || client === false) {
         return;
       }
 
       var offset = dom.offset();
       var x = Math.round((client.x - offset.left) / zoom - screen[0]);
       var y = Math.round((client.y - offset.top) / zoom - screen[1]);
+      this.mousePosition = [x, y];
+
+      if (this.props.getMousePosition) {
+        this.props.getMousePosition([x, y]);
+      }
+
       return [x, y];
     }
   }, {
@@ -1151,49 +1317,11 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       }
     }
   }, {
-    key: "fixCoords",
-    value: function fixCoords() {
-      if (!this.so || !this.so.items) {
-        return;
-      }
-
-      var items = this.so.items;
-      var coords = this.state.coords;
-      var changes = [];
-
-      for (var i = 0; i < items.length; i++) {
-        var _items$i2 = items[i],
-            coord = _items$i2.coord,
-            id = _items$i2.id,
-            item = _items$i2.item;
-        var fixedCoord = this.getCoord({
-          left: coord[0],
-          top: coord[1]
-        });
-        coord[0] = fixedCoord[0];
-        coord[1] = fixedCoord[1];
-        changes.push({
-          item: item,
-          id: id,
-          left: coord[0],
-          top: coord[1]
-        });
-      }
-
-      this.setState({
-        coords: coords
-      });
-
-      if (this.props.onChange) {
-        this.props.onChange(changes, coords);
-      }
-    }
-  }, {
     key: "zoom",
     value: function zoom(sign, abs) {
-      var _this$props5 = this.props,
-          onZoom = _this$props5.onZoom,
-          zoom = _this$props5.zoom;
+      var _this$props6 = this.props,
+          onZoom = _this$props6.onZoom,
+          zoom = _this$props6.zoom;
 
       if (!onZoom) {
         return;
@@ -1240,9 +1368,9 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       var _this$state = this.state,
           selected = _this$state.selected,
           coords = _this$state.coords;
-      var _this$props6 = this.props,
-          snap = _this$props6.snap,
-          screen = _this$props6.screen;
+      var _this$props7 = this.props,
+          snap = _this$props7.snap,
+          screen = _this$props7.screen;
       var sign,
           index = code === 37 || code === 39 ? 0 : 1;
       var id = selected;
@@ -1280,7 +1408,6 @@ var RPGraph = /*#__PURE__*/function (_Component) {
           keyCodes = _this$props$keyCodes === void 0 ? [] : _this$props$keyCodes;
 
       if (code === 27) {
-        debugger;
         this.setState({
           seleced: false
         });
@@ -1331,14 +1458,16 @@ var RPGraph = /*#__PURE__*/function (_Component) {
     value: function getScreen() {
       var screen = this.props.screen;
       var zoomScreen = this.state.zoomScreen;
-      return [screen[0] + zoomScreen[0], screen[1] + zoomScreen[1]];
+      var x = Math.round(screen[0] + zoomScreen[0]);
+      var y = Math.round(screen[1] + zoomScreen[1]);
+      return [x, y];
     }
   }, {
     key: "getBackground",
     value: function getBackground() {
-      var _this$props7 = this.props,
-          snap = _this$props7.snap,
-          zoom = _this$props7.zoom;
+      var _this$props8 = this.props,
+          snap = _this$props8.snap,
+          zoom = _this$props8.zoom;
 
       var _snap = _slicedToArray(snap, 3),
           x = _snap[0],
@@ -1366,53 +1495,60 @@ var RPGraph = /*#__PURE__*/function (_Component) {
   }, {
     key: "render",
     value: function render() {
-      var _this7 = this;
+      var _this6 = this;
 
-      var _this$props8 = this.props,
-          items = _this$props8.items,
-          _this$props8$events = _this$props8.events,
-          events = _this$props8$events === void 0 ? {} : _this$props8$events,
-          _this$props8$getCoord = _this$props8.getCoords,
-          getCoords = _this$props8$getCoord === void 0 ? function () {} : _this$props8$getCoord,
-          id = _this$props8.id,
-          className = _this$props8.className,
-          style = _this$props8.style,
-          _this$props8$selected = _this$props8.selectedStyle,
-          selectedStyle = _this$props8$selected === void 0 ? {} : _this$props8$selected;
+      var _this$props9 = this.props,
+          items = _this$props9.items,
+          _this$props9$events = _this$props9.events,
+          events = _this$props9$events === void 0 ? {} : _this$props9$events,
+          _this$props9$getCoord = _this$props9.getCoords,
+          getCoords = _this$props9$getCoord === void 0 ? function () {} : _this$props9$getCoord,
+          id = _this$props9.id,
+          className = _this$props9.className,
+          style = _this$props9.style,
+          selectedColor = _this$props9.selectedColor;
       var _this$state2 = this.state,
           coords = _this$state2.coords,
-          selected = _this$state2.selected;
-      var screen = this.getScreen();
+          selected = _this$state2.selected,
+          screen = this.getScreen();
       getCoords(coords);
       var Items = items.filter(function (item) {
-        return _this7.isVisible(item);
+        return _this6.isVisible(item);
       }).map(function (item, i) {
+        var _props;
+
         var id = item.id;
-        coords[id] = coords[id] || _this7.getCoord(item, true).concat(item);
-        var coord = coords[id];
-        var props = {
+        coords[id] = coords[id] || _this6.getCoord(item, true).concat(item);
+        var coord = coords[id],
+            left = coord[0] + screen[0],
+            top = coord[1] + screen[1];
+        var props = (_props = {
           key: i,
           className: 'r-floater-item' + (id === selected ? ' selected' : ''),
-          id: item.id,
-          onMouseDown: function onMouseDown(e) {
-            return _this7.itemMouseDown(e, item, id, i);
-          },
-          onTouchStart: function onTouchStart(e) {
-            return _this7.itemMouseDown(e, item, id, i);
-          },
-          style: {
-            left: coord[0] + screen[0],
-            top: coord[1] + screen[1],
-            ...(id === selected ? selectedStyle : {})
-          },
-          draggable: false
-        };
+          id: item.id
+        }, _defineProperty(_props, _this6.touch ? 'onTouchStart' : 'onMouseDown', function (e) {
+          return _this6.itemMouseDown(e, item, id, i);
+        }), _defineProperty(_props, "style", {
+          left: left,
+          top: top,
+          boxShadow: id === selected ? '0 0 8px 2px ' + selectedColor : undefined
+        }), _defineProperty(_props, "draggable", false), _props);
         return /*#__PURE__*/_react.default.createElement("div", props, item.template);
       });
       var eventProps = {};
 
       for (var prop in events) {
         eventProps[prop] = events[prop];
+      }
+
+      var svgProps = {
+        className: 'r-floater-svg'
+      };
+
+      if (this.touch) {
+        svgProps.onTouchStart = this.svgMouseDownTouch.bind(this);
+      } else {
+        svgProps.onMouseDown = this.svgMouseDown.bind(this);
       }
 
       return /*#__PURE__*/_react.default.createElement("div", _extends({
@@ -1429,11 +1565,7 @@ var RPGraph = /*#__PURE__*/function (_Component) {
       }), /*#__PURE__*/_react.default.createElement("div", {
         className: "r-floater-container",
         style: this.getStyle()
-      }, /*#__PURE__*/_react.default.createElement("svg", {
-        className: "r-floater-svg",
-        onMouseDown: this.svgMouseDown.bind(this),
-        onTouchStart: this.svgMouseDown.bind(this)
-      }), Items));
+      }, /*#__PURE__*/_react.default.createElement("svg", svgProps), Items));
     }
   }]);
 
@@ -1442,8 +1574,6 @@ var RPGraph = /*#__PURE__*/function (_Component) {
 
 exports.default = RPGraph;
 RPGraph.defaultProps = {
-  text: {},
-  line: {},
   screen: [0, 0],
   snap: [1, 1],
   zoom: 1,
@@ -1456,5 +1586,7 @@ RPGraph.defaultProps = {
   arrowSize: [10, 12],
   fontSize: 10,
   textTop: -5,
-  textLeft: 0
+  textLeft: 0,
+  liveChange: false,
+  selectedColor: '#6f8ea7'
 };

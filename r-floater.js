@@ -5,44 +5,109 @@ export default class RPGraph extends Component {
   constructor(props) {
     super(props);
     this.touch = 'ontouchstart' in document.documentElement;
-    var {items,simpleConnect = false} = this.props;
+    var {items} = this.props;
     this.dom = createRef();
-    this.downMode = false;
+    this.isDown = false;
     this.state = {
       coords:this.getCoords(items),
       selected:false,
       zoomScreen:[0,0]
     };
   }
-  getClient(e,index = 0){
-    if(this.touch){
-      if(!e.changedTouches[index]){return false}
-      return {x: e.changedTouches[index].clientX,y:e.changedTouches[index].clientY };
+  svgMouseDownTouch(e){
+    var {selected} = this.state;
+    if(selected !== false){this.setState({selected:false})}
+  }
+  touchMouseDown(e){
+    this.touchOffset = false; // در موو این مقدار پر می شود و در اند اعمال می شود. پس در هر استارتی باید ریست شود
+    if(this.isDown){//اگر انگشت دوم داره تاچ می کنه
+      //اگر روی آیتمی تاچ شده تاچ اندش رو اجرا کن
+      if(this.itemDown){this.itemMouseUp();}
+      this.eventHandler('window','mousemove',$.proxy(this.touchMouseMove,this));
+      this.mousePosition = this.getMousePosition(e);
+      var {zoom,screen,moveHandleClassName} = this.props;
+      if(!moveHandleClassName){return;}
+      let x = e.changedTouches[0].clientX;
+      let y = e.changedTouches[0].clientY;
+      let touchId = e.changedTouches[0].identifier;
+      this.distance = false;
+      this.newZoom = zoom;
+      if(e.changedTouches[1]){
+        let X = e.changedTouches[1].clientX;
+        let Y = e.changedTouches[1].clientY;
+        distance = Math.round(Math.sqrt(Math.pow(x - X,2) + Math.pow(y - Y,2)));
+      }
+      this.so = {zoom,touchId,x,y,screen:[screen[0],screen[1]]};
     }
-    else{return {x:e.clientX,y:e.clientY}}
+    else{
+      this.isDown = true;
+    }
+    this.eventHandler('window','mouseup',$.proxy(this.touchMouseUp,this));
+  }
+  touchMouseMove(e){
+    var {onPan} = this.props;
+    if(!onPan){return;}
+    var {x,y,screen,touchId,zoom} = this.so;
+    let touch1,touch2;
+    if(e.changedTouches[0]){
+      if(e.changedTouches[0].identifier === touchId){touch1 = e.changedTouches[0];}
+      else{touch2 = e.changedTouches[0];}
+    }
+    if(e.changedTouches[1]){
+      if(e.changedTouches[1].identifier === touchId){touch1 = e.changedTouches[1];}
+      else{touch2 = e.changedTouches[1];}
+    }
+    
+    if(touch1){
+      let X = touch1.clientX;
+      let Y = touch1.clientY;
+      let offsetX = X - x;
+      let offsetY = Y - y;
+      this.touchOffset = [(X - x) / zoom + screen[0],(Y - y) / zoom + screen[1]];
+      $(this.dom.current).find('line,path,.r-floater-item,text').css('transform',`translate(${offsetX/zoom}px,${offsetY/zoom}px)`);
+      if(touch2){
+        let X1 = touch2.clientX;
+        let Y1 = touch2.clientY;
+        let distance = Math.round(Math.sqrt(Math.pow(X1 - X,2) + Math.pow(Y1 - Y,2)));
+        if(this.distance === false){this.distance = distance;}
+        let delta = Math.floor((distance - this.distance) / 40) / 10;
+        let newZoom = parseFloat((zoom + delta).toFixed(1));
+        if(newZoom < 0.1){newZoom = 0.1}
+        else if(newZoom > 8){newZoom = 8}
+        if(this.newZoom !== newZoom){
+          this.newZoom = newZoom;
+          this.zoom(newZoom,true);
+        }
+      }
+    }
+  }
+  touchMouseUp(){
+    this.isDown = false;
+    this.distance = false;
+    if(this.touchOffset !== false){
+      $(this.dom.current).find('line,path,.r-floater-item,text').css('transform','unset')
+      this.props.onPan(this.touchOffset);
+      this.touchOffset = false;
+    }
+    this.eventHandler('window','mousemove',this.touchMouseMove,'unbind');
+    this.eventHandler('window','mouseup',this.touchMouseUp,'unbind');
+  }
+  getClient(e){
+    if(this.touch){
+      let {changedTouches = []} = e;
+      if(!changedTouches[0]){return false;}
+      return {x:changedTouches[0].clientX,y:changedTouches[0].clientY}
+    }
+    return {x:e.clientX,y:e.clientY}
   }
   getOffset(e,[x,y],[startX,startY]){
     var {zoom} = this.props; 
-    var client = this.getClient(e,this.multiTouch?1:0);
+    var client = this.getClient(e);
     return [(client.x - x) / zoom + startX,(client.y - y) / zoom + startY ];
   }
-  getMTO(e){
-    var t1 = this.getClient(e,0);
-    var t2 = this.getClient(e,1);
-    if(t1 === false || t2 === false){return false}
-    return Math.round(Math.sqrt(Math.pow(t1.x - t2.x,2)+Math.pow(t1.y - t2.y,2)))
-  }
   svgMouseDown(e){
-    if(this.downMode !== false){
-      this.itemMouseUp();
-      this.svgMouseUp();
-      this.multiTouch = true;
-      this.mto = false;
-      this.startZoom = this.props.zoom;
-      this.svgMouseDown(e,true);
-      return;
-    }
-    this.downMode = 'svg';
+    this.mousePosition = this.getMousePosition(e);
+    this.offset = false;
     var {screen,moveHandleClassName} = this.props;
     this.svgMoved = false;
     e.preventDefault();
@@ -52,18 +117,10 @@ export default class RPGraph extends Component {
     this.eventHandler('window','mousemove',$.proxy(this.svgMouseMove,this))
     this.eventHandler('window','mouseup',$.proxy(this.svgMouseUp,this))
   }
-  itemMouseDown(e,item,id,index){
-    if(this.downMode !== false){
-      this.itemMouseUp();
-      this.svgMouseUp();
-      this.multiTouch = true;
-      this.mto = false;
-      this.startZoom = this.props.zoom;
-      this.svgMouseDown(e);
-      return;
-    }
-    this.downMode = 'item';
-    if(!this.touch && e.button === 1){this.svgMouseDown(e); return;}
+  itemMouseDown(e,item,id){
+    if(this.itemDown){return;}
+    this.mousePosition = this.getMousePosition(e);
+    if(e.button === 1){this.svgMouseDown(e); return;}
     var {moveHandleClassName} = this.props,{coords} = this.state;
     if(!moveHandleClassName){return;}  
     var target = $(e.target);
@@ -72,75 +129,88 @@ export default class RPGraph extends Component {
     this.setState({selected:id})
     $('.r-floater-item').css({zIndex:1});
     $(e.currentTarget).css({zIndex:10});
-    var client = this.getClient(e);
-    this.so = {x:client.x,y:client.y,items:[]}; 
+    this.so = {items:[],mx:this.mousePosition[0],my:this.mousePosition[1]}; 
+    let container = $(this.dom.current);
     for(var i = 0; i < ids.length; i++){
       var coord = coords[ids[i]];
       let itm = this.getItemById(ids[i])
-      this.so.items.push({coord,left:coord[0],top:coord[1],id:ids[i],item:itm});
+      let dom = container.find('#' + ids[i]);
+      let cssLeft = parseInt(dom.css('left'));
+      let cssTop = parseInt(dom.css('top'));
+      this.so.items.push({left:coord[0],top:coord[1],id:ids[i],item:itm,cssLeft,cssTop});
     }
+    this.itemDown = true;
     this.eventHandler('window','mousemove',$.proxy(this.itemMouseMove,this))
     this.eventHandler('window','mouseup',$.proxy(this.itemMouseUp,this))
   }
   svgMouseMove(e){
-    var {onPan,screen:Screen,onZoom,zoom} = this.props;
+    var {onPan,zoom} = this.props;
     if(!onPan){return;}
     this.svgMoved = true;
     var {x,y,screen} = this.so;
-    let offset = this.getOffset(e,[x,y],screen);
-    var diff = Math.sqrt(Math.pow(offset[0] - Screen[0],2) + Math.pow(offset[1] - Screen[1],2));
-    if(diff < 100 / zoom){onPan(offset);}
-    if(this.multiTouch){ 
-      var mto = this.getMTO(e);
-      if(mto !== false){
-        if(this.mto === false){this.mto = mto;}
-        let zoomOffset = (mto - this.mto) / 200;
-        let newZoom = parseFloat((this.startZoom + zoomOffset).toFixed(1));
-        if(newZoom > 8){newZoom = 8}
-        else if(newZoom < 0.3){newZoom = 0.3}
-        var dom = $(this.dom.current);
-        var width = dom.width();
-        var height = dom.height();
-        var zoomScreen = [(((1 - newZoom) * width) / newZoom / 2),(((1 - newZoom) * height) / newZoom / 2)]
-        onZoom(newZoom);
-        this.setState({zoomScreen})
-      } 
-    }
+    let client = this.getClient(e);
+    let offsetX = client.x - x;
+    let offsetY = client.y - y;
+    this.offset = this.getOffset(e,[x,y],screen);
+    $(this.dom.current).find('line,path,.r-floater-item,text').css('transform',`translate(${offsetX/zoom}px,${offsetY/zoom}px)`)
   }
   svgMouseUp(){
-    this.multiTouch = false;
-    if(this.downMode === false){return;}
-    this.downMode = false;
     this.eventHandler('window','mousemove',this.svgMouseMove,'unbind')
     this.eventHandler('window','mouseup',this.svgMouseUp,'unbind')
+    if(this.offset !== false){
+      $(this.dom.current).find('line,path,.r-floater-item,text').css('transform','unset')
+      this.props.onPan(this.offset)
+      this.offset = false;
+    }
     if(this.svgMoved === false){
       var {selected} = this.state;
       if(selected !== false){this.setState({selected:false})}
     }
   }
   itemMouseMove(e){
-    var {move} = this.props;
+    var {move,liveChange} = this.props;
+    var {coords} = this.state;
     if(move === false){return;}
-    var {coords} = this.state,{x,y,items} = this.so;
+    var {items,mx,my} = this.so;
+    var container = $(this.dom.current);
+    this.mousePosition = this.getMousePosition(e);
     for(var i = 0; i < items.length; i++){
-      var {coord,left,top,item} = items[i];
+      var {left,top,item,id,cssLeft,cssTop} = items[i];
       if(item.move === false){continue;}
-      var offset = this.getOffset(e,[x,y],[left,top]);
-      coord[0] = offset[0];
-      coord[1] = offset[1];
+      var offsetX = this.mousePosition[0] - mx,offsetY = this.mousePosition[1] - my;
+      let coord = coords[id];
+      coord[0] = offsetX + left; coord[1] = offsetY + top;
+
+      if(!liveChange){container.find('#' + id).css({left:cssLeft + offsetX,top:cssTop + offsetY})}
     }
-    this.setState({coords});
+    if(liveChange){this.setState({coords})}
   }
   itemMouseUp(){
-    this.multiTouch = false;
-    if(this.downMode === false){return;}
-    this.downMode = false;
+    this.itemDown = false;
     this.eventHandler('window','mousemove',this.itemMouseMove,'unbind');
     this.eventHandler('window','mouseup',this.itemMouseUp,'unbind');
     $('.r-floater-item').css({transition:'.1s'});
     this.fixCoords();
-
     $('.r-floater-item').css({transition:'0s'});
+  }
+  fixCoords(){
+    if(!this.so || !this.so.items){return;}
+    var {liveChange} = this.props;
+    var {items} = this.so;
+    var {coords} = this.state;
+    var screen = this.getScreen();
+    var container = $(this.dom.current);
+    var changes = [];
+    for(var i = 0; i < items.length; i++){
+      let {id,item} = items[i],coord = coords[id];
+      coord[0] = this.getSnapedCoord(0,coord[0]);
+      coord[1] = this.getSnapedCoord(1,coord[1]);
+      let dom = container.find('#' + id);
+      dom.css({left:coord[0] + screen[0],top:coord[1] + screen[1]})
+      changes.push({item,id,left:coord[0],top:coord[1]})
+    }
+    this.setState({coords})
+    if(this.props.onChange){this.props.onChange(changes,coords)}
   }
   eventHandler(selector, event, action,type = 'bind'){
     var me = { mousedown: "touchstart", mousemove: "touchmove", mouseup: "touchend" }; 
@@ -149,7 +219,7 @@ export default class RPGraph extends Component {
     element.unbind(event, action); 
     if(type === 'bind'){element.bind(event, action)}
   }
-  getCoord({left = 0, top = 0},init){
+  getCoord({left = 0, top = 0}){
     return [this.getSnapedCoord(0,left),this.getSnapedCoord(1,top)]
   }
   isVisible(item){return (typeof item.show === 'function'?item.show({...this.props,...this.state}):item.show) !== false;}
@@ -185,13 +255,13 @@ export default class RPGraph extends Component {
     return () => {return {
       x1:fromArea.left + ((this.getSortedIndex(dict[from].bottoms,i) + 1)  / (dict[from].bottoms.length + 1)) * fromArea.width,
       x2:toArea.left + ((this.getSortedIndex(dict[to].tops,i) + 1)  / (dict[to].tops.length + 1)) * toArea.width,
-      y1:fromArea.bottom,y2:toArea.top,direction:1,type:1,index:i,from,to
+      y1:fromArea.bottom,y2:toArea.top,direction:'bottom',index:i,from,to
     }}
   }
   toBottomSimple({dict,from,to,fromArea,toArea,i}){
     return () => {return {
       x1:fromArea.center.x,x2:toArea.center.x,
-      y1:fromArea.bottom,y2:toArea.top,direction:1,type:1,index:i,from,to
+      y1:fromArea.bottom,y2:toArea.top,direction:'bottom',type:1,index:i,from,to
     }}
   }
   toTop({dict,from,to,fromArea,toArea,i}){
@@ -200,13 +270,13 @@ export default class RPGraph extends Component {
     return () => {return {
       x1:fromArea.left + ((this.getSortedIndex(dict[from].tops,i) + 1)  / (dict[from].tops.length + 1)) * fromArea.width,
       x2:toArea.left + ((this.getSortedIndex(dict[to].bottoms,i) + 1)  / (dict[to].bottoms.length + 1)) * toArea.width,
-      y1:fromArea.top,y2:toArea.bottom,direction:-1,type:1,index:i,from,to
+      y1:fromArea.top,y2:toArea.bottom,direction:'top',index:i,from,to
     }}
   }
   toTopSimple({dict,from,to,fromArea,toArea,i}){
     return () => {return {
       x1:fromArea.center.x,x2:toArea.center.x,
-      y1:fromArea.top,y2:toArea.bottom,direction:-1,type:1,index:i,from,to
+      y1:fromArea.top,y2:toArea.bottom,direction:'top',index:i,from,to
     }}
   }
   toRight({dict,from,to,fromArea,toArea,i}){
@@ -215,13 +285,13 @@ export default class RPGraph extends Component {
     return () => { return {
       y1:fromArea.top + ((this.getSortedIndex(dict[from].rights,i) + 1)  / (dict[from].rights.length + 1)) * fromArea.height,
       y2:toArea.top + ((this.getSortedIndex(dict[to].lefts,i) + 1)  / (dict[to].lefts.length + 1)) * toArea.height,
-      x1:fromArea.right,x2:toArea.left,direction:1,type:2,index:i,from,to
+      x1:fromArea.right,x2:toArea.left,direction:'right',index:i,from,to
     }}
   }
   toRightSimple({dict,from,to,fromArea,toArea,i}){
     return () => { return {
       y1:fromArea.center.y,y2:toArea.center.y,
-      x1:fromArea.right,x2:toArea.left,direction:1,type:2,index:i,from,to
+      x1:fromArea.right,x2:toArea.left,direction:'right',index:i,from,to
     }}
   }
   toLeft({dict,from,to,fromArea,toArea,i}){
@@ -230,16 +300,15 @@ export default class RPGraph extends Component {
     return () => { return {
       y1:fromArea.top + ((this.getSortedIndex(dict[from].lefts,i) + 1)  / (dict[from].lefts.length + 1)) * fromArea.height,
       y2:toArea.top + ((this.getSortedIndex(dict[to].rights,i) + 1)  / (dict[to].rights.length + 1)) * toArea.height,
-      x1:fromArea.left,x2:toArea.right,direction:-1,type:2,index:i,from,to
+      x1:fromArea.left,x2:toArea.right,direction:'left',index:i,from,to
     }}
   }
   toLeftSimple({dict,from,to,fromArea,toArea,i}){
     return () => { return {
       y1:fromArea.center.y,y2:toArea.center.y,
-      x1:fromArea.left,x2:toArea.right,direction:-1,type:2,index:i,from,to
+      x1:fromArea.left,x2:toArea.right,direction:'left',index:i,from,to
     }}
   }
-
   getRelationsCoords(){
     var {relations,simpleConnect} = this.props,{coords} = this.state,dict = {},Relations = [];
     var a,b = simpleConnect === true?'Simple':'';
@@ -266,10 +335,15 @@ export default class RPGraph extends Component {
     }
     return Relations;
   }
+  renderRelation(id,index,ext = {}){
+    let obj = {...this.relations[id][index],...ext};
+    return this.getLine(obj) + this.getArrow(obj);
+  }
   update(){
     var relationsCoords = this.getRelationsCoords();
     var {relations} = this.props;
     let svg;
+    this.relations = {};
     for(var i = 0; i < relationsCoords.length; i++){
       let props = relationsCoords[i]();
       let relation = relations[props.from][props.index];
@@ -285,7 +359,9 @@ export default class RPGraph extends Component {
         text = '',
       } = relation;
       let obj = {...props,lineWidth,lineColor,lineDash,fontColor,arrowSize,fontSize,text,textTop,textLeft};
-      svg += this.getLine(obj) + this.getArrow(obj);
+      this.relations[props.from] = this.relations[props.from] || [];
+      this.relations[props.from][props.index] = obj;
+      svg += this.renderRelation(props.from,props.index);
     }
     $('.r-floater svg').html(svg);
   }
@@ -302,36 +378,57 @@ export default class RPGraph extends Component {
     str += `<text x="${x}" y="${y}" fill="${fontColor || lineColor || '#000'}" transform="rotate(${radian*-1} ${x},${y}) translate(${textLeft} ${textTop === undefined? (lineWidth / -2 - 3):textTop})" style="font-size:${fontSize || 10}px;-webkit-user-select:none; user-select:none;" text-anchor="middle">${value === undefined?'':value}</text>`;
     return str;
   }
-  getLine2({x1,y1,x2,y2,type,fontSize,lineDash,lineColor,lineWidth,fontColor,text,textTop,textLeft}){
+  getLine2({x1,y1,x2,y2,direction,fontSize,lineDash,lineColor,lineWidth,fontColor,text,textTop,textLeft,arrowSize}){
     var cx = (x1 + x2) / 2,cy = (y1 + y2) / 2;
     var start = `<line stroke="${lineColor}" stroke-width="${lineWidth}" stroke-dasharray="${lineDash}" `
     var str = '',tx,ty;
-    if(type === 1){
+    if(direction === 'bottom'){
       str += `${start}x1="${x1}" y1="${y1}" x2="${x1}" y2="${cy}" />`
       str += `${start}x1="${x1}" y1="${cy}" x2="${x2}" y2="${cy}" />`
-      str += `${start}x1="${x2}" y1="${cy}" x2="${x2}" y2="${y2}" />`
+      str += `${start}x1="${x2}" y1="${cy}" x2="${x2}" y2="${y2 - arrowSize[0]}" />`
       tx = x2; ty = cy;
     }
-    else {
+    else if(direction === 'top'){
+      str += `${start}x1="${x1}" y1="${y1}" x2="${x1}" y2="${cy}" />`
+      str += `${start}x1="${x1}" y1="${cy}" x2="${x2}" y2="${cy}" />`
+      str += `${start}x1="${x2}" y1="${cy}" x2="${x2}" y2="${y2 + arrowSize[0]}" />`
+      tx = x2; ty = cy;
+    }
+    else if(direction === 'right'){
       str += `${start}x1="${x1}" y1="${y1}" x2="${cx}" y2="${y1}" />`
       str += `${start}x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" />`
-      str += `${start}x1="${cx}" y1="${y2}" x2="${x2}" y2="${y2}" />`
+      str += `${start}x1="${cx}" y1="${y2}" x2="${x2 - arrowSize[1]}" y2="${y2}" />`
+      tx = cx; ty = y2;
+    }
+    else{
+      str += `${start}x1="${x1}" y1="${y1}" x2="${cx}" y2="${y1}" />`
+      str += `${start}x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" />`
+      str += `${start}x1="${cx}" y1="${y2}" x2="${x2 + arrowSize[1]}" y2="${y2}" />`
       tx = cx; ty = y2;
     }
     var value = typeof text === 'function'?text():text;
     str += `<text x="${tx}" y="${ty}" fill="${fontColor || lineColor || '#000'}" transform="translate(${textLeft} ${textTop})" style="font-size:${fontSize || 10}px;-webkit-user-select:none; user-select:none;" text-anchor="middle">${value === undefined?'':value}</text>`;
     return str
   }
-  getLine3({x1,y1,x2,y2,arrowSize,type,direction,fontSize,textTop,textLeft,lineDash,lineColor,lineWidth,fontColor,text}){
-    var start = `<path fill="none" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-dasharray="${lineDash}" `
+  getLine3({x1,y1,x2,y2,arrowSize,direction,fontSize,textTop,textLeft,lineDash,lineColor,lineWidth,fontColor,text}){
+    var start = `<path fill="transparent" stroke="${lineColor}" stroke-width="${lineWidth}" stroke-dasharray="${lineDash}" `
     var str = '';
     var cx = (x1 + x2) / 2,cy = (y1 + y2) / 2,dest1,dest2,q1,q2;
-    if(type === 1){
-      y2 = y2 + -arrowSize[0] * direction; dest1 = [cx - x1,cy - y1]; dest2 = [x2 - cx,y2 - cy]; q1 = [0,(cy - y1) / 2]; q2 = [x2 - cx,(y2 - cy) / 2];
+    if(direction === 'bottom'){
+      y2 = y2 - arrowSize[0]; 
+      dest1 = [cx - x1,cy - y1]; dest2 = [x2 - cx,y2 - cy]; q1 = [0,(cy - y1) / 2]; q2 = [x2 - cx,(y2 - cy) / 2];
+      str += `${start}d="M${x1},${y1} q${q1[0]},${q1[1]},${dest1[0]},${dest1[1]} q${q2[0]},${q2[1]},${dest2[0]},${dest2[1]}" />`
+    }
+    else if(direction === 'top'){
+      y2 = y2 + arrowSize[0]; dest1 = [cx - x1,cy - y1]; dest2 = [x2 - cx,y2 - cy]; q1 = [0,(cy - y1) / 2]; q2 = [x2 - cx,(y2 - cy) / 2];
+      str += `${start}d="M${x1},${y1} q${q1[0]},${q1[1]},${dest1[0]},${dest1[1]} q${q2[0]},${q2[1]},${dest2[0]},${dest2[1]}" />`;
+    }
+    else if(direction === 'right'){
+      x2 = x2 - arrowSize[1]; dest1 = [cx - x1,cy - y1]; dest2 = [x2 - cx,y2 - cy]; q1 = [(cx - x1) / 2,0]; q2 = [(x2 - cx) / 2,y2 - cy];
       str += `${start}d="M${x1},${y1} q${q1[0]},${q1[1]},${dest1[0]},${dest1[1]} q${q2[0]},${q2[1]},${dest2[0]},${dest2[1]}" />`
     }
     else {
-      x2 = x2 + -arrowSize[1] * direction; dest1 = [cx - x1,cy - y1]; dest2 = [x2 - cx,y2 - cy]; q1 = [(cx - x1) / 2,0]; q2 = [(x2 - cx) / 2,y2 - cy];
+      x2 = x2 + arrowSize[1]; dest1 = [cx - x1,cy - y1]; dest2 = [x2 - cx,y2 - cy]; q1 = [(cx - x1) / 2,0]; q2 = [(x2 - cx) / 2,y2 - cy];
       str += `${start}d="M${x1},${y1} q${q1[0]},${q1[1]},${dest1[0]},${dest1[1]} q${q2[0]},${q2[1]},${dest2[0]},${dest2[1]}" />`
     }
     var radian = this.getRadian({x1:x1 + q1[0],y1:y1 + q1[1],x2:cx + q2[0],y2:cy + q2[1]});
@@ -352,29 +449,26 @@ export default class RPGraph extends Component {
     var line2 = this.getLineBySMR({x:x2,y:y2},-arrowSize[1] * 2,radian + arrowSize[0]);
     return '<path d="M'+x2+','+y2+' L'+line1.x2+','+line1.y2+' L'+line2.x2+','+line2.y2+' Z" fill="'+lineColor+'"/>';
   }
-  getArrow2({x2,y2,arrowSize,type,lineColor,direction}){
-    if(type === 1){
-      if(direction === -1){//top
+  getArrow2({x2,y2,arrowSize,lineColor,direction}){
+      if(direction === 'top'){//top
         return `<path d="M${x2},${y2} L${x2 - arrowSize[0] / 2},${y2 + arrowSize[1]} L${x2 + arrowSize[0] / 2},${y2 + arrowSize[1]} Z" fill="${lineColor}"/>`;
       }
-      else{//bottom
+      else if(direction === 'bottom'){//bottom
         return `<path d="M${x2},${y2} L${x2 - arrowSize[0] / 2},${y2 - arrowSize[1]} L${x2 + arrowSize[0] / 2},${y2 - arrowSize[1]} Z" fill="${lineColor}"/>`;
       }
-    }
-    else{
-      if(direction === -1){//left
+      else if(direction === 'left'){//left
         return `<path d="M${x2},${y2} L${x2 + arrowSize[1]},${y2 - arrowSize[0] / 2} L${x2 + arrowSize[1]},${y2 + arrowSize[0] / 2} Z" fill="${lineColor}"/>`;
       }
       else{//right
         return `<path d="M${x2},${y2} L${x2 - arrowSize[1]},${y2 - arrowSize[0] / 2} L${x2 - arrowSize[1]},${y2 + arrowSize[0] / 2} Z" fill="${lineColor}"/>`;
       }
-    }
   }
   getArrow3(obj){return this.getArrow2(obj)}
   componentDidUpdate(){this.update();}
   componentDidMount(){
-    var {getMousePosition} = this.props;
-    if(getMousePosition){this.eventHandler('window','mousemove',(e)=>getMousePosition(this.getMousePosition(e)));}
+    if(this.touch){
+      this.eventHandler('.r-floater-container','mousedown',$.proxy(this.touchMouseDown,this));
+    }
     this.update();
     $(this.dom.current).focus();
   } 
@@ -382,10 +476,12 @@ export default class RPGraph extends Component {
   drop(e){if(this.props.onDrop){this.props.onDrop(e,this.getMousePosition(e))}}
   getMousePosition(e){
     var client = this.getClient(e),{zoom} = this.props,screen = this.getScreen(),dom = $(this.dom.current);
-    if(dom.length === 0){return;}
+    if(dom.length === 0 || client === false){return;}
     var offset = dom.offset()
     var x = Math.round((client.x - offset.left) / zoom - screen[0])
     var y = Math.round((client.y - offset.top) / zoom - screen[1])
+    this.mousePosition = [x,y];
+    if(this.props.getMousePosition){this.props.getMousePosition([x,y])}
     return [x,y];
   }
   getRadian({x1,x2,y1,y2}) {
@@ -432,21 +528,6 @@ export default class RPGraph extends Component {
       }
     } 
   }
-  fixCoords(){
-    if(!this.so || !this.so.items){return;}
-    var {items} = this.so;
-    var {coords} = this.state;
-    var changes = [];
-    for(var i = 0; i < items.length; i++){
-      let {coord,id,item} = items[i];
-      let fixedCoord = this.getCoord({left:coord[0],top:coord[1]});
-      coord[0] = fixedCoord[0];
-      coord[1] = fixedCoord[1];
-      changes.push({item,id,left:coord[0],top:coord[1]})
-    }
-    this.setState({coords})
-    if(this.props.onChange){this.props.onChange(changes,coords)}
-  }
   zoom(sign,abs){
     var {onZoom,zoom} = this.props;
     if(!onZoom){return;}
@@ -490,10 +571,7 @@ export default class RPGraph extends Component {
   keyDown(e){
     var code = e.keyCode;
     var {keyCodes = []} = this.props;
-    if(code === 27){
-      debugger
-      this.setState({seleced:false})
-    }
+    if(code === 27){this.setState({seleced:false})}
     if([37,38,39,40].indexOf(code) !== -1){this.arrow(code)}
     else if(code === 16){
       $(window).bind('keyup',$.proxy(this.shiftUp,this));
@@ -524,7 +602,9 @@ export default class RPGraph extends Component {
   getScreen(){
     var {screen} = this.props;
     var {zoomScreen } = this.state;
-    return [screen[0] + zoomScreen[0],screen[1] + zoomScreen[1]]
+    var x = Math.round(screen[0] + zoomScreen[0]);
+    var y = Math.round(screen[1] + zoomScreen[1]);
+    return [x,y]
   }
   getBackground() { 
     var {snap,zoom} = this.props;
@@ -545,26 +625,26 @@ export default class RPGraph extends Component {
     };
   }
   render() { 
-    var {items,events = {},getCoords = ()=>{},id,className,style,selectedStyle = {}} = this.props;
-    var {coords,selected} = this.state;
-    var screen = this.getScreen();
+    var {items,events = {},getCoords = ()=>{},id,className,style,selectedColor} = this.props;
+    var {coords,selected} = this.state,screen = this.getScreen();
     getCoords(coords);
     var Items = items.filter((item)=>this.isVisible(item)).map((item,i)=>{  
       let {id} = item;
       coords[id] = coords[id] || this.getCoord(item,true).concat(item); 
-      let coord = coords[id];
-
+      let coord = coords[id],left = coord[0] + screen[0],top = coord[1] + screen[1];
       let props = {
         key:i,className:'r-floater-item' + (id === selected?' selected':''),id:item.id,
-        onMouseDown:(e)=>this.itemMouseDown(e,item,id,i),
-        onTouchStart:(e)=>this.itemMouseDown(e,item,id,i),
-        style:{left:coord[0] + screen[0],top:coord[1] + screen[1],...(id === selected?selectedStyle:{})},
+        [this.touch?'onTouchStart':'onMouseDown']:(e)=>this.itemMouseDown(e,item,id,i),
+        style:{left,top,boxShadow:id === selected?'0 0 8px 2px ' +selectedColor:undefined},
         draggable:false,
       }
       return <div {...props}>{item.template}</div>;
     });
     var eventProps = {};
     for(var prop in events){eventProps[prop] = events[prop]}
+    var svgProps = {className:'r-floater-svg'}
+    if(this.touch){svgProps.onTouchStart = this.svgMouseDownTouch.bind(this)}
+    else{svgProps.onMouseDown = this.svgMouseDown.bind(this)}
     return (
       <div 
         ref={this.dom} className={"r-floater" + (className?' ' + className:'')} style={style} tabIndex={0} 
@@ -574,7 +654,7 @@ export default class RPGraph extends Component {
         onDrop={this.drop.bind(this)}
       >    
         <div className='r-floater-container' style={this.getStyle()}>
-          <svg className='r-floater-svg' onMouseDown={this.svgMouseDown.bind(this)} onTouchStart={this.svgMouseDown.bind(this)}></svg>
+          <svg {...svgProps}></svg>
           {Items}
         </div>
       </div>
@@ -582,6 +662,6 @@ export default class RPGraph extends Component {
   }
 }
 RPGraph.defaultProps = {
-  text:{},line:{},screen:[0,0],snap:[1,1],zoom:1,connectType:3,simpleConnect:true,
-  lineWidth:1,lineColor:'#6f8ea7',lineDash:[5,0],fontColor:'#6f8ea7',arrowSize:[10,12],fontSize:10,textTop:-5,textLeft:0
+  screen:[0,0],snap:[1,1],zoom:1,connectType:3,simpleConnect:true,
+  lineWidth:1,lineColor:'#6f8ea7',lineDash:[5,0],fontColor:'#6f8ea7',arrowSize:[10,12],fontSize:10,textTop:-5,textLeft:0,liveChange:false,selectedColor:'#6f8ea7'
 };
