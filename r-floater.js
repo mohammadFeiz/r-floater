@@ -1,7 +1,7 @@
 import React, { Component,createRef } from 'react';
 import $ from 'jquery';
 import './index.css';
-export default class RPGraph extends Component {
+export default class RFloater extends Component {
   constructor(props) {
     super(props);
     this.touch = 'ontouchstart' in document.documentElement;
@@ -9,7 +9,7 @@ export default class RPGraph extends Component {
     this.dom = createRef();
     this.isDown = false;
     this.state = {
-      coords:this.getCoords(items),
+      itemsDictionary:this.getItemsDictionary(items),
       selected:false,
       zoomScreen:[0,0]
     };
@@ -32,11 +32,6 @@ export default class RPGraph extends Component {
       let touchId = e.changedTouches[0].identifier;
       this.distance = false;
       this.newZoom = zoom;
-      if(e.changedTouches[1]){
-        let X = e.changedTouches[1].clientX;
-        let Y = e.changedTouches[1].clientY;
-        distance = Math.round(Math.sqrt(Math.pow(x - X,2) + Math.pow(y - Y,2)));
-      }
       this.so = {zoom,touchId,x,y,screen:[screen[0],screen[1]]};
     }
     else{
@@ -72,7 +67,7 @@ export default class RPGraph extends Component {
         if(this.distance === false){this.distance = distance;}
         let delta = Math.floor((distance - this.distance) / 40) / 10;
         let newZoom = parseFloat((zoom + delta).toFixed(1));
-        if(newZoom < 0.1){newZoom = 0.1}
+        if(newZoom < 0.2){newZoom = 0.2}
         else if(newZoom > 8){newZoom = 8}
         if(this.newZoom !== newZoom){
           this.newZoom = newZoom;
@@ -117,27 +112,70 @@ export default class RPGraph extends Component {
     this.eventHandler('window','mousemove',$.proxy(this.svgMouseMove,this))
     this.eventHandler('window','mouseup',$.proxy(this.svgMouseUp,this))
   }
+  connectDown(e,item){
+    this.eventHandler('window','mousemove',$.proxy(this.connectMove,this))
+    this.eventHandler('window','mouseup',$.proxy(this.connectUp,this))
+    var mp = this.getMousePosition(e);
+    var screen = this.getScreen();
+    var x = screen[0] + mp[0];
+    var y = screen[1] + mp[1];
+    $('.r-floater-connect').attr({
+      x1:x,x2:x,y1:y,y2:y
+    })
+    item.relations = item.relations || [];
+    this.so = {
+      start:item
+    }
+  }
+  connectMove(e){
+    var mp = this.getMousePosition(e);
+    var screen = this.getScreen();
+    var x = screen[0] + mp[0];
+    var y = screen[1] + mp[1];
+    $('.r-floater-connect').attr({
+      x2:x,y2:y
+    })
+  }
+  connectUp(e){
+    this.eventHandler('window','mousemove',this.connectMove,'unbind')
+    this.eventHandler('window','mouseup',this.connectUp,'unbind')
+    var target = $(e.target);
+    var Item = target.parents('.r-floater-item');
+    if(Item.length && this.so.start){
+      var id = Item.eq(0).attr('id');
+      let end = this.getItemById(id);
+      end.relations = end.relations || [];
+      this.props.onAddRelation(this.so.start,end);
+    }
+    $('.r-floater-connect').attr({
+      x1:0,x2:0,y1:0,y2:0
+    })
+    
+  }
   itemMouseDown(e,item,id){
     if(this.itemDown){return;}
     this.mousePosition = this.getMousePosition(e);
     if(e.button === 1){this.svgMouseDown(e); return;}
-    var {moveHandleClassName} = this.props,{coords} = this.state;
+    var {moveHandleClassName} = this.props,{itemsDictionary} = this.state;
     if(!moveHandleClassName){return;}  
     var target = $(e.target);
+    if(target.hasClass('r-floater-origin-icon')){
+      this.connectDown(e,item);
+      return
+    }
     if(!target.hasClass(moveHandleClassName) && target.parents('.' + moveHandleClassName) && target.parents('.' + moveHandleClassName).length === 0){return;}  
-    var ids = [id].concat(this.getSiblings(item));
+    var items = [item].concat(this.getSiblings(item));
     this.setState({selected:id})
     $('.r-floater-item').css({zIndex:1});
     $(e.currentTarget).css({zIndex:10});
     this.so = {items:[],mx:this.mousePosition[0],my:this.mousePosition[1]}; 
     let container = $(this.dom.current);
-    for(var i = 0; i < ids.length; i++){
-      var coord = coords[ids[i]];
-      let itm = this.getItemById(ids[i])
-      let dom = container.find('#' + ids[i]);
+    for(var i = 0; i < items.length; i++){
+      let itm = itemsDictionary[items[i].id];
+      let dom = container.find('#' + items[i].id);
       let cssLeft = parseInt(dom.css('left'));
       let cssTop = parseInt(dom.css('top'));
-      this.so.items.push({left:coord[0],top:coord[1],id:ids[i],item:itm,cssLeft,cssTop});
+      this.so.items.push({left:itm.left,top:itm.top,item:itm,cssLeft,cssTop});
     }
     this.itemDown = true;
     this.eventHandler('window','mousemove',$.proxy(this.itemMouseMove,this))
@@ -169,21 +207,20 @@ export default class RPGraph extends Component {
   }
   itemMouseMove(e){
     var {move,liveChange} = this.props;
-    var {coords} = this.state;
+    var {itemsDictionary} = this.state;
     if(move === false){return;}
     var {items,mx,my} = this.so;
     var container = $(this.dom.current);
     this.mousePosition = this.getMousePosition(e);
     for(var i = 0; i < items.length; i++){
-      var {left,top,item,id,cssLeft,cssTop} = items[i];
+      var {left,top,item,cssLeft,cssTop} = items[i];
       if(item.move === false){continue;}
       var offsetX = this.mousePosition[0] - mx,offsetY = this.mousePosition[1] - my;
-      let coord = coords[id];
-      coord[0] = offsetX + left; coord[1] = offsetY + top;
+      item.left = offsetX + left; item.top = offsetY + top;
 
-      if(!liveChange){container.find('#' + id).css({left:cssLeft + offsetX,top:cssTop + offsetY})}
+      if(!liveChange){container.find('#' + item.id).css({left:cssLeft + offsetX,top:cssTop + offsetY})}
     }
-    if(liveChange){this.setState({coords})}
+    if(liveChange){this.setState({itemsDictionary})}
   }
   itemMouseUp(){
     this.itemDown = false;
@@ -195,22 +232,22 @@ export default class RPGraph extends Component {
   }
   fixCoords(){
     if(!this.so || !this.so.items){return;}
-    var {liveChange} = this.props;
     var {items} = this.so;
-    var {coords} = this.state;
+    var {onChange = ()=>{}} = this.props;
+    var {itemsDictionary} = this.state;
     var screen = this.getScreen();
     var container = $(this.dom.current);
     var changes = [];
     for(var i = 0; i < items.length; i++){
-      let {id,item} = items[i],coord = coords[id];
-      coord[0] = this.getSnapedCoord(0,coord[0]);
-      coord[1] = this.getSnapedCoord(1,coord[1]);
-      let dom = container.find('#' + id);
-      dom.css({left:coord[0] + screen[0],top:coord[1] + screen[1]})
-      changes.push({item,id,left:coord[0],top:coord[1]})
+      let {item} = items[i];
+      item.left = this.getSnapedCoord(0,item.left);
+      item.top = this.getSnapedCoord(1,item.top);
+      let dom = container.find('#' + item.id);
+      dom.css({left:item.left + screen[0],top:item.top + screen[1]})
+      changes.push(item);
     }
-    this.setState({coords})
-    if(this.props.onChange){this.props.onChange(changes,coords)}
+    this.setState({itemsDictionary})
+    onChange(changes,itemsDictionary)
   }
   eventHandler(selector, event, action,type = 'bind'){
     var me = { mousedown: "touchstart", mousemove: "touchmove", mouseup: "touchend" }; 
@@ -219,23 +256,32 @@ export default class RPGraph extends Component {
     element.unbind(event, action); 
     if(type === 'bind'){element.bind(event, action)}
   }
-  getCoord({left = 0, top = 0}){
-    return [this.getSnapedCoord(0,left),this.getSnapedCoord(1,top)]
-  }
   isVisible(item){return (typeof item.show === 'function'?item.show({...this.props,...this.state}):item.show) !== false;}
-  getCoords(items){
-    var coords = {};
+  getItemsDictionary(items){
+    var itemsDictionary = {};
     for (var i = 0; i < items.length; i++){
       if(!this.isVisible(items[i])){continue;}
-      var {id} = items[i];
-      coords[id] = this.getCoord(items[i],true).concat(items[i]);
+      var item = items[i];
+      item.left = this.getSnapedCoord(0,item.left);
+      item.top = this.getSnapedCoord(1,item.top);
+      itemsDictionary[item.id] = item;
     }
-    return coords;
+    return itemsDictionary;
   }
-  
+  getItemsDictionary(items){
+    var itemsDictionary = {};
+    for (var i = 0; i < items.length; i++){
+      if(!this.isVisible(items[i])){continue;}
+      var item = items[i];
+      item.left = this.getSnapedCoord(0,item.left);
+      item.top = this.getSnapedCoord(1,item.top);
+      itemsDictionary[item.id] = item;
+    }
+    return itemsDictionary;
+  }
   getArea(id){
-    var {coords} = this.state,screen = this.getScreen(),element = $('#' + id),width = element.width(),height = element.height();
-    var coord = coords[id],left = coord[0] + screen[0],top = coord[1] + screen[1];
+    var {itemsDictionary} = this.state,screen = this.getScreen(),element = $('#' + id),width = element.width(),height = element.height();
+    var item = itemsDictionary[id],left = item.left + screen[0],top = item.top + screen[1];
     return {
       left,top,right:left + width,bottom:top + height,width,height,
       center:{x:left + width / 2,y: top + height / 2}
@@ -249,78 +295,79 @@ export default class RPGraph extends Component {
     }
     arr.push([index,pos]);
   }
-  toBottom({dict,from,to,fromArea,toArea,i}){
-    this.addAndSort(dict[from].bottoms,[i,toArea.left]);
-    this.addAndSort(dict[to].tops,[i,fromArea.left]);
+  toBottom({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
+    this.addAndSort(dict[from].bottoms,[relationIndex,toArea.left]);
+    this.addAndSort(dict[to].tops,[relationIndex,fromArea.left]);
     return () => {return {
-      x1:fromArea.left + ((this.getSortedIndex(dict[from].bottoms,i) + 1)  / (dict[from].bottoms.length + 1)) * fromArea.width,
-      x2:toArea.left + ((this.getSortedIndex(dict[to].tops,i) + 1)  / (dict[to].tops.length + 1)) * toArea.width,
-      y1:fromArea.bottom,y2:toArea.top,direction:'bottom',index:i,from,to
+      x1:fromArea.left + ((this.getSortedIndex(dict[from].bottoms,relationIndex) + 1)  / (dict[from].bottoms.length + 1)) * fromArea.width,
+      x2:toArea.left + ((this.getSortedIndex(dict[to].tops,relationIndex) + 1)  / (dict[to].tops.length + 1)) * toArea.width,
+      y1:fromArea.bottom,y2:toArea.top,direction:'bottom',relationIndex,from,to,itemIndex
     }}
   }
-  toBottomSimple({dict,from,to,fromArea,toArea,i}){
-    return () => {return {
-      x1:fromArea.center.x,x2:toArea.center.x,
-      y1:fromArea.bottom,y2:toArea.top,direction:'bottom',type:1,index:i,from,to
-    }}
-  }
-  toTop({dict,from,to,fromArea,toArea,i}){
-    this.addAndSort(dict[from].tops,[i,toArea.left]);
-    this.addAndSort(dict[to].bottoms,[i,fromArea.left]);
-    return () => {return {
-      x1:fromArea.left + ((this.getSortedIndex(dict[from].tops,i) + 1)  / (dict[from].tops.length + 1)) * fromArea.width,
-      x2:toArea.left + ((this.getSortedIndex(dict[to].bottoms,i) + 1)  / (dict[to].bottoms.length + 1)) * toArea.width,
-      y1:fromArea.top,y2:toArea.bottom,direction:'top',index:i,from,to
-    }}
-  }
-  toTopSimple({dict,from,to,fromArea,toArea,i}){
+  toBottomSimple({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
     return () => {return {
       x1:fromArea.center.x,x2:toArea.center.x,
-      y1:fromArea.top,y2:toArea.bottom,direction:'top',index:i,from,to
+      y1:fromArea.bottom,y2:toArea.top,direction:'bottom',type:1,relationIndex,from,to,itemIndex
     }}
   }
-  toRight({dict,from,to,fromArea,toArea,i}){
-    this.addAndSort(dict[from].rights,[i,toArea.top]);
-    this.addAndSort(dict[to].lefts,[i,fromArea.top]);
-    return () => { return {
-      y1:fromArea.top + ((this.getSortedIndex(dict[from].rights,i) + 1)  / (dict[from].rights.length + 1)) * fromArea.height,
-      y2:toArea.top + ((this.getSortedIndex(dict[to].lefts,i) + 1)  / (dict[to].lefts.length + 1)) * toArea.height,
-      x1:fromArea.right,x2:toArea.left,direction:'right',index:i,from,to
+  toTop({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
+    this.addAndSort(dict[from].tops,[relationIndex,toArea.left]);
+    this.addAndSort(dict[to].bottoms,[relationIndex,fromArea.left]);
+    return () => {return {
+      x1:fromArea.left + ((this.getSortedIndex(dict[from].tops,relationIndex) + 1)  / (dict[from].tops.length + 1)) * fromArea.width,
+      x2:toArea.left + ((this.getSortedIndex(dict[to].bottoms,relationIndex) + 1)  / (dict[to].bottoms.length + 1)) * toArea.width,
+      y1:fromArea.top,y2:toArea.bottom,direction:'top',relationIndex,from,to,itemIndex
     }}
   }
-  toRightSimple({dict,from,to,fromArea,toArea,i}){
-    return () => { return {
-      y1:fromArea.center.y,y2:toArea.center.y,
-      x1:fromArea.right,x2:toArea.left,direction:'right',index:i,from,to
+  toTopSimple({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
+    return () => {return {
+      x1:fromArea.center.x,x2:toArea.center.x,itemIndex,
+      y1:fromArea.top,y2:toArea.bottom,direction:'top',relationIndex,from,to
     }}
   }
-  toLeft({dict,from,to,fromArea,toArea,i}){
-    this.addAndSort(dict[from].lefts,[i,toArea.top]);
-    this.addAndSort(dict[to].rights,[i,fromArea.top]);
+  toRight({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
+    this.addAndSort(dict[from].rights,[j,toArea.top]);
+    this.addAndSort(dict[to].lefts,[j,fromArea.top]);
     return () => { return {
-      y1:fromArea.top + ((this.getSortedIndex(dict[from].lefts,i) + 1)  / (dict[from].lefts.length + 1)) * fromArea.height,
-      y2:toArea.top + ((this.getSortedIndex(dict[to].rights,i) + 1)  / (dict[to].rights.length + 1)) * toArea.height,
-      x1:fromArea.left,x2:toArea.right,direction:'left',index:i,from,to
+      y1:fromArea.top + ((this.getSortedIndex(dict[from].rights,relationIndex) + 1)  / (dict[from].rights.length + 1)) * fromArea.height,
+      y2:toArea.top + ((this.getSortedIndex(dict[to].lefts,relationIndex) + 1)  / (dict[to].lefts.length + 1)) * toArea.height,
+      x1:fromArea.right,x2:toArea.left,direction:'right',relationIndex,from,to,itemIndex
     }}
   }
-  toLeftSimple({dict,from,to,fromArea,toArea,i}){
+  toRightSimple({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
     return () => { return {
-      y1:fromArea.center.y,y2:toArea.center.y,
-      x1:fromArea.left,x2:toArea.right,direction:'left',index:i,from,to
+      y1:fromArea.center.y,y2:toArea.center.y,itemIndex,
+      x1:fromArea.right,x2:toArea.left,direction:'right',relationIndex,from,to
+    }}
+  }
+  toLeft({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
+    this.addAndSort(dict[from].lefts,[j,toArea.top]);
+    this.addAndSort(dict[to].rights,[j,fromArea.top]);
+    return () => { return {
+      y1:fromArea.top + ((this.getSortedIndex(dict[from].lefts,relationIndex) + 1)  / (dict[from].lefts.length + 1)) * fromArea.height,
+      y2:toArea.top + ((this.getSortedIndex(dict[to].rights,relationIndex) + 1)  / (dict[to].rights.length + 1)) * toArea.height,
+      x1:fromArea.left,x2:toArea.right,direction:'left',relationIndex,from,to,itemIndex
+    }}
+  }
+  toLeftSimple({dict,from,to,fromArea,toArea,relationIndex,itemIndex}){
+    return () => { return {
+      y1:fromArea.center.y,y2:toArea.center.y,itemIndex,
+      x1:fromArea.left,x2:toArea.right,direction:'left',relationIndex,from,to
     }}
   }
   getRelationsCoords(){
-    var {relations,simpleConnect} = this.props,{coords} = this.state,dict = {},Relations = [];
+    var {simpleConnect,items} = this.props,{itemsDictionary} = this.state,dict = {},Relations = [];
     var a,b = simpleConnect === true?'Simple':'';
-    for(let from in relations){
-      for(let i = 0; i < relations[from].length; i++){
-        let relation = relations[from][i],{to,type} = relation;
-        if(!coords[from] || !coords[to]){continue}
+    for(let i = 0; i < items.length; i++){
+      let {id:from,relations = []} = items[i];
+      for(let j = 0; j < relations.length; j++){
+        let {to,type} = relations[j];
+        if(!itemsDictionary[from] || !itemsDictionary[to]){continue}
         let fromArea = this.getArea(from),toArea = this.getArea(to);
         if(!fromArea || !toArea){continue;}
         dict[from] = dict[from] || {lefts:[],rights:[],tops:[],bottoms:[]};
         dict[to] = dict[to] || {lefts:[],rights:[],tops:[],bottoms:[]};  
-        let obj = {dict,from,to,fromArea,toArea,i};
+        let obj = {dict,from,to,fromArea,toArea,itemIndex:i,relationIndex:j};
         if(type){a = type;}
         else if((fromArea.left < toArea.right && fromArea.right > toArea.left)){
           if(fromArea.top < toArea.top){a = 'toBottom';}
@@ -335,18 +382,44 @@ export default class RPGraph extends Component {
     }
     return Relations;
   }
+  // getRelationsCoords(){
+  //   var {relations,simpleConnect} = this.props,{itemsDictionary} = this.state,dict = {},Relations = [];
+  //   var a,b = simpleConnect === true?'Simple':'';
+  //   for(let from in relations){
+  //     for(let i = 0; i < relations[from].length; i++){
+  //       let relation = relations[from][i],{to,type} = relation;
+  //       if(!itemsDictionary[from] || !itemsDictionary[to]){continue}
+  //       let fromArea = this.getArea(from),toArea = this.getArea(to);
+  //       if(!fromArea || !toArea){continue;}
+  //       dict[from] = dict[from] || {lefts:[],rights:[],tops:[],bottoms:[]};
+  //       dict[to] = dict[to] || {lefts:[],rights:[],tops:[],bottoms:[]};  
+  //       let obj = {dict,from,to,fromArea,toArea,i};
+  //       if(type){a = type;}
+  //       else if((fromArea.left < toArea.right && fromArea.right > toArea.left)){
+  //         if(fromArea.top < toArea.top){a = 'toBottom';}
+  //         else{a = 'toTop';}
+  //       }
+  //       else{
+  //         if(fromArea.left < toArea.left){a = 'toRight';}
+  //         else{a = 'toLeft';}
+  //       }
+  //       Relations.push(this[a + b](obj));
+  //     }
+  //   }
+  //   return Relations;
+  // }
   renderRelation(id,index,ext = {}){
     let obj = {...this.relations[id][index],...ext};
     return this.getLine(obj) + this.getArrow(obj);
   }
   update(){
     var relationsCoords = this.getRelationsCoords();
-    var {relations} = this.props;
+    var {items,connectColor} = this.props;
     let svg;
     this.relations = {};
     for(var i = 0; i < relationsCoords.length; i++){
       let props = relationsCoords[i]();
-      let relation = relations[props.from][props.index];
+      let relation = items[props.itemIndex].relations[props.relationIndex];
       let {
         lineWidth = this.props.lineWidth,
         lineColor = this.props.lineColor,
@@ -363,6 +436,7 @@ export default class RPGraph extends Component {
       this.relations[props.from][props.index] = obj;
       svg += this.renderRelation(props.from,props.index);
     }
+    svg += `<line class="r-floater-connect" x1="0" y1="0" x2="0" y2="0" stroke="${connectColor}"/>`
     $('.r-floater svg').html(svg);
   }
   getLine(obj){return this['getLine' + this.props.connectType](obj);} 
@@ -382,32 +456,21 @@ export default class RPGraph extends Component {
     var cx = (x1 + x2) / 2,cy = (y1 + y2) / 2;
     var start = `<line stroke="${lineColor}" stroke-width="${lineWidth}" stroke-dasharray="${lineDash}" `
     var str = '',tx,ty;
-    if(direction === 'bottom'){
+    var value = typeof text === 'function'?text():text;
+    value = value === undefined?'':value
+    if(direction === 'bottom' || direction === 'top'){
       str += `${start}x1="${x1}" y1="${y1}" x2="${x1}" y2="${cy}" />`
       str += `${start}x1="${x1}" y1="${cy}" x2="${x2}" y2="${cy}" />`
-      str += `${start}x1="${x2}" y1="${cy}" x2="${x2}" y2="${y2 - arrowSize[0]}" />`
+      str += `${start}x1="${x2}" y1="${cy}" x2="${x2}" y2="${y2 + arrowSize[0] * (direction === 'bottom'?-1:1)}" />`
       tx = x2; ty = cy;
-    }
-    else if(direction === 'top'){
-      str += `${start}x1="${x1}" y1="${y1}" x2="${x1}" y2="${cy}" />`
-      str += `${start}x1="${x1}" y1="${cy}" x2="${x2}" y2="${cy}" />`
-      str += `${start}x1="${x2}" y1="${cy}" x2="${x2}" y2="${y2 + arrowSize[0]}" />`
-      tx = x2; ty = cy;
-    }
-    else if(direction === 'right'){
-      str += `${start}x1="${x1}" y1="${y1}" x2="${cx}" y2="${y1}" />`
-      str += `${start}x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" />`
-      str += `${start}x1="${cx}" y1="${y2}" x2="${x2 - arrowSize[1]}" y2="${y2}" />`
-      tx = cx; ty = y2;
     }
     else{
       str += `${start}x1="${x1}" y1="${y1}" x2="${cx}" y2="${y1}" />`
       str += `${start}x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" />`
-      str += `${start}x1="${cx}" y1="${y2}" x2="${x2 + arrowSize[1]}" y2="${y2}" />`
-      tx = cx; ty = y2;
+      str += `${start}x1="${cx}" y1="${y2}" x2="${x2 + arrowSize[1] * (direction === 'right'?-1:1)}" y2="${y2}" />`
+      tx = value.length * 9 > Math.abs(cx - x2)? cx:(cx + x2) / 2; ty = y2;
     }
-    var value = typeof text === 'function'?text():text;
-    str += `<text x="${tx}" y="${ty}" fill="${fontColor || lineColor || '#000'}" transform="translate(${textLeft} ${textTop})" style="font-size:${fontSize || 10}px;-webkit-user-select:none; user-select:none;" text-anchor="middle">${value === undefined?'':value}</text>`;
+    str += `<text x="${tx}" y="${ty}" fill="${fontColor || lineColor || '#000'}" transform="translate(${textLeft} ${textTop})" style="font-size:${fontSize || 10}px;-webkit-user-select:none; user-select:none;" text-anchor="middle">${value}</text>`;
     return str
   }
   getLine3({x1,y1,x2,y2,arrowSize,direction,fontSize,textTop,textLeft,lineDash,lineColor,lineWidth,fontColor,text}){
@@ -473,7 +536,7 @@ export default class RPGraph extends Component {
     $(this.dom.current).focus();
   } 
   dragOver(e){if(this.props.onDragOver){this.props.onDragOver(e,this.getMousePosition(e))}}
-  drop(e){if(this.props.onDrop){this.props.onDrop(e,this.getMousePosition(e))}}
+  drop(e){if(this.props.onDrop){this.props.onDrop(e,this.getMousePosition(e),this.state.itemsDictionary)}}
   getMousePosition(e){
     var client = this.getClient(e),{zoom} = this.props,screen = this.getScreen(),dom = $(this.dom.current);
     if(dom.length === 0 || client === false){return;}
@@ -501,32 +564,42 @@ export default class RPGraph extends Component {
     }
   }
   getSiblings(item){
+    if(this.ctrl){return this.getAllChilds(item);}
     if(!item.group){return []}
     var {items} = this.props;
     var result = [];
     for(var i = 0; i < items.length; i++){
-      if(!this.isVisible(items[i])){continue;}
-      if(items[i].id === item.id){continue}
-      if(items[i].group === item.group){
-        result.push(items[i].id)
-      }
+      if(!this.isVisible(items[i]) || items[i].id === item.id || items[i].group !== item.group){continue;}
+      result.push(items[i])
     }
     return result;
+  }
 
-  }
-  getAllChilds(id){
+  getAllChilds(item){
     this.childs = [];
-    this.getAllChildsRecursive(id);
+    this.foundIds = {};
+    this.getAllChildsRecursive(item);
+    return this.childs;
   }
-  getAllChildsRecursive(id){
-    var {relations} = this.props;
-    for(var i = 0; i < relations.length; i++){
-      var {from,to} = relations[i];
-      if(from === id && this.childs.indexOf(to) === -1){
-        this.childs.push(to);
-        this.getAllChildsRecursive(to);
+  getAllChildsRecursive(item){
+    if(!item.relations || !item.relations.length){return;}
+    for(var i = 0; i < item.relations.length; i++){
+      let {to} = item.relations[i];
+      let toItem = this.getItemById(to);
+      if(this.foundIds[to] === undefined){
+        this.childs.push(toItem);
+        this.foundIds[to] = true;
+        this.getAllChildsRecursive(toItem);
       }
     } 
+  }
+  getZoomOffset(zoom){
+    if(zoom < 2){return 0.1}
+    if(zoom < 4){return 0.2}
+    if(zoom < 6){return 0.3}
+    return 0.4;
+    
+    
   }
   zoom(sign,abs){
     var {onZoom,zoom} = this.props;
@@ -534,7 +607,8 @@ export default class RPGraph extends Component {
     var newZoom;
     if(abs){newZoom = sign;}
     else{
-      var offset = sign * 0.1;
+
+      var offset = sign * this.getZoomOffset(zoom);
       newZoom = parseFloat((zoom + offset).toFixed(1));
     }
     if(newZoom < 0.2){newZoom = 0.2;} else if(newZoom > 8){newZoom = 8;}
@@ -549,22 +623,24 @@ export default class RPGraph extends Component {
     var {snap} = this.props;
     return Math.round(value / snap[index]) * snap[index];
   }
-  wheel(e){this.zoom(e.deltaY === 100?-1:1)}
   arrow(code){
-    var {selected,coords} = this.state;
-    var {snap,screen} = this.props;
-    var sign,index = code === 37 || code === 39?0:1;
+    var {selected,itemsDictionary} = this.state;
+    var {snap,screen,onChange = ()=>{}} = this.props;
     var id = selected;
     if(id !== false){
-      let item = this.getItemById(id);
-      sign = code === 37 || code === 38?-1:1;
-      coords[id][index] += snap[index] * sign;
-      this.setState({coords});
-      if(this.props.onChange){this.props.onChange([{item,id,left:coords[id][0],top:coords[id][1]}],coords)}
+      let item = itemsDictionary[id];
+      if(code === 37){item.left += -snap[0];}
+      else if(code === 39){item.left += snap[0];}
+      else if(code === 38){item.top += -snap[1];}
+      else if(code === 40){item.top += snap[1];}
+      this.setState({itemsDictionary});
+      onChange([item],itemsDictionary);
     }
     else{
-      sign = code === 37 || code === 38?1:-1;
-      screen[index] += 5 * sign;
+      if(code === 37){screen[0] += 5;}
+      else if(code === 39){screen[0] += -5;}
+      else if(code === 38){screen[1] += 5;}
+      else if(code === 40){screen[1] += -5;}
       if(this.props.onPan){this.props.onPan(screen)}
     }
   }
@@ -583,6 +659,10 @@ export default class RPGraph extends Component {
     else if(keyCodes[code]){
       keyCodes[code]({...this.props,...this.state})
     }
+    else if(code === 17){this.ctrl = true;}
+  }
+  keyUp(){
+    this.ctrl = false;
   }
   shiftUp(){
     $(window).unbind('keyup',this.shiftUp);
@@ -625,20 +705,31 @@ export default class RPGraph extends Component {
     };
   }
   render() { 
-    var {items,events = {},getCoords = ()=>{},id,className,style,selectedColor} = this.props;
-    var {coords,selected} = this.state,screen = this.getScreen();
-    getCoords(coords);
+    var {items,events = {},id,className,style,selectedColor,onAddRelation} = this.props;
+    var {itemsDictionary,selected} = this.state,screen = this.getScreen();
     var Items = items.filter((item)=>this.isVisible(item)).map((item,i)=>{  
       let {id} = item;
-      coords[id] = coords[id] || this.getCoord(item,true).concat(item); 
-      let coord = coords[id],left = coord[0] + screen[0],top = coord[1] + screen[1];
+      if(!itemsDictionary[id]){
+        item.left = this.getSnapedCoord(0,item.left || 0);
+        item.top = this.getSnapedCoord(1,item.top || 0);
+        itemsDictionary[id] = item;
+      }
+      let left = item.left + screen[0],top = item.top + screen[1];
       let props = {
         key:i,className:'r-floater-item' + (id === selected?' selected':''),id:item.id,
         [this.touch?'onTouchStart':'onMouseDown']:(e)=>this.itemMouseDown(e,item,id,i),
         style:{left,top,boxShadow:id === selected?'0 0 8px 2px ' +selectedColor:undefined},
-        draggable:false,
+        draggable:false,onDragStart:(e)=>e.preventDefault()
       }
-      return <div {...props}>{item.template}</div>;
+      return (
+        <div {...props}>
+          {item.template}
+          {
+            onAddRelation && item.connect !== false && 
+            <div className='r-floater-origin-icon'></div>
+          }
+        </div>
+      );
     });
     var eventProps = {};
     for(var prop in events){eventProps[prop] = events[prop]}
@@ -647,13 +738,14 @@ export default class RPGraph extends Component {
     else{svgProps.onMouseDown = this.svgMouseDown.bind(this)}
     return (
       <div 
-        ref={this.dom} className={"r-floater" + (className?' ' + className:'')} style={style} tabIndex={0} 
-        onWheel={this.wheel.bind(this)} 
+        ref={this.dom} className={"r-floater" + (className?' ' + className:'')} style={style} tabIndex={0} draggable={false}
+        onWheel={(e)=>this.zoom(e.deltaY === 100?-1:1)} 
         onKeyDown={this.keyDown.bind(this)} {...eventProps} id={id}
+        onKeyUp={this.keyUp.bind(this)}
         onDragOver={this.dragOver.bind(this)}
         onDrop={this.drop.bind(this)}
       >    
-        <div className='r-floater-container' style={this.getStyle()}>
+        <div className='r-floater-container' draggable={false} style={this.getStyle()}>
           <svg {...svgProps}></svg>
           {Items}
         </div>
@@ -661,7 +753,7 @@ export default class RPGraph extends Component {
     );
   }
 }
-RPGraph.defaultProps = {
+RFloater.defaultProps = {
   screen:[0,0],snap:[1,1],zoom:1,connectType:3,simpleConnect:true,
-  lineWidth:1,lineColor:'#6f8ea7',lineDash:[5,0],fontColor:'#6f8ea7',arrowSize:[10,12],fontSize:10,textTop:-5,textLeft:0,liveChange:false,selectedColor:'#6f8ea7'
+  lineWidth:1,lineColor:'#6f8ea7',lineDash:[5,0],fontColor:'#6f8ea7',arrowSize:[10,12],fontSize:10,textTop:-5,textLeft:0,liveChange:false,selectedColor:'#6f8ea7',connectColor:'#6f8ea7'
 };
